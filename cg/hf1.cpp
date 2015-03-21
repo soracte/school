@@ -191,12 +191,14 @@ float computeTime(Vector pi, Vector vi, Vector pi1, Vector vi1) {
     float b = -0.25 * vi1.x - 0.25 * vi.x;
     float c = -1.5 * (pi.y - pi1.y);
     float d = -0.25 * vi1.y - 0.25 * vi.y;
+    float e = -1.5 * (pi.z - pi1.z);
+    float f = -0.25 * vi1.z - 0.25 * vi.z;
 
-    float disc = sqr(2 * (a * b + c * d)) - 4 * (sqr(b) + sqr(d) - 1) * (sqr(a) + sqr(c));
 
-//  std::cout << a << " " << b << " " << c << " " << d << " " << std::endl;
-    float ret1 = ((-2 * (a * b  + c * d)) - sqrt(disc)) / (2 * (sqr(b) + sqr(d) - 1));
-    float ret2 = ((-2 * (a * b  + c * d)) + sqrt(disc)) / (2 * (sqr(b) + sqr(d) - 1));
+    float disc = sqr(2 * (a * b + c * d + e * f)) - 4 * (sqr(b) + sqr(d) + sqr(f)- 1) * (sqr(a) + sqr(c) + sqr(e));
+
+    float ret1 = ((-2 * (a * b  + c * d + e * f)) - sqrt(disc)) / (2 * (sqr(b) + sqr(d) + sqr(f) - 1));
+    float ret2 = ((-2 * (a * b  + c * d + e * f)) + sqrt(disc)) / (2 * (sqr(b) + sqr(d) + sqr(f) - 1));
 
     return ret1 > ret2 ? ret1 : ret2;
 }
@@ -207,12 +209,10 @@ float t[100];
 int pCount;
 
 void recalcV() {
-//    v[0] = (p[1] - p[0]).Normalize();
     v[0] = Vector();
     v[1] = (p[2] - p[1]).Normalize();
     v[pCount - 2] = (p[pCount - 1] - p[pCount - 2]).Normalize();
 
-//    v[pCount - 1] = v[pCount - 2]; 
     v[pCount - 1] = Vector();
 
     for (int i = 2; i < pCount - 2; i++) {
@@ -239,33 +239,32 @@ void recalcT() {
 void drawPoints() {
        //
 } 
-   
-// Rajzolas, ha az alkalmazas ablak ervenytelenne valik, akkor ez a fuggveny hivodik meg
-void onDisplay( ) {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // kepernyo torles
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);		// torlesi szin beallitasa
-    glColor3f(0.5f, 0.5f, 0.5f);
 
-    drawSeparators();
-    drawPoints();
-//  p[0] = Vector(-0.5, 0);
-//  p[1] = Vector(-0.25, 0.15);
-//  p[2] = Vector(0.1, -0.1);
-//  p[3] = Vector(0.35, 0.2);
-//  p[4] = Vector(0.8, 0);
-//  p[5] = Vector(0.6, 0.5);
-//  p[6] = Vector(-0.6, -0.5);
-//  p[7] = Vector(-0.8, 0.1);
-//  pCount = 8;
-    
-    recalcV();
-    recalcT();
+enum View { TOP, FRONT, RIGHT };
 
-//  p[0] = Vector(-0.25, 0.15);
-//  p[1] = Vector(0.1, -0.1);
-//  v[0] = Vector(0.813, -0.581);
-//  v[1] = Vector(0.9241, 0.3819);
-//  pCount = 2;
+Vector findVectorToDraw(Vector r, View view) {
+    Vector base;
+    Vector shift;
+
+    switch (view) {
+        case TOP:
+            base = Vector(r.x, r.y);
+            shift = Vector(-0.5, 0.5);
+            break;
+        case FRONT:
+            base = Vector(r.y, r.z);
+            shift = Vector(-0.5, -0.5);
+            break;
+        case RIGHT:
+            base = Vector(r.x, r.z);
+            shift = Vector(0.5, -0.5);
+            break;
+    }
+     
+    return base * 0.5 + shift;
+}
+
+void drawCurve(View view) {
 
     glBegin(GL_LINE_STRIP);
     for (int i = 0; i < pCount - 1; i++) {
@@ -278,21 +277,33 @@ void onDisplay( ) {
 
             float progressInSection = tt - t[i];
             Vector r = a * cub(progressInSection) + b * sqr(progressInSection) + c * progressInSection + d;
-            Vector rd = a * 3 * sqr(progressInSection) + b * 2 * progressInSection + c; 
-            glVertex2f(r.x, r.y);
-//          std::cout << r.x << ";" << r.y << "@" << rd.Length() << std::endl;
+            Vector point = findVectorToDraw(r, view);
+            glVertex2f(point.x, point.y); 
         }
     }
     glEnd();
+}
+   
+// Rajzolas, ha az alkalmazas ablak ervenytelenne valik, akkor ez a fuggveny hivodik meg
+void onDisplay( ) {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // kepernyo torles
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);		// torlesi szin beallitasa
+    glColor3f(0.5f, 0.5f, 0.5f);
 
-    glColor3f(0, 1, 0);
-    for (int i = 0; i < pCount; i++) {
-        glBegin(GL_LINE_STRIP);
-//      glVertex2f(p[i].x, p[i].y);
-//      glVertex2f(p[i].x + v[i].x, p[i].y + v[i].y);
-        glEnd();
-    }
+    drawSeparators();
+    drawPoints();
 
+//  Vector v(0.4, 0.6, 0.8);
+//  v = findVectorToDraw(v, RIGHT);
+//  std::cout << v.x << ";" << v.y << ";" << v.z << std::endl;
+    recalcV();
+    recalcT();
+
+    drawCurve(TOP);
+    drawCurve(FRONT);
+    drawCurve(RIGHT);
+
+   
     glutSwapBuffers();     				// Buffercsere: rajzolas vege
 
 }
@@ -317,7 +328,6 @@ void onMouse(int button, int state, int x, int y) {
         int quarter = determineQuarter(v);
         if (quarter != 1) {
             p[pCount++] = conv(v, quarter);
-            std::cout << p[pCount - 1].x << ";" << p[pCount - 1].y << ";" << p[pCount - 1].z << std::endl;
         }
 	}
 }
