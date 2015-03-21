@@ -336,17 +336,20 @@ int findClosestIndex(Vector point) {
     }
 
     float minsofar = (point - p[0]).Length();
+    int minindex = 0;
+    std::cout << "0@" << minsofar << std::endl;
     float distance;
 
     for (int i = 1; i < pCount; i++) {
         distance = (point - p[i]).Length();
+        std::cout << i << "@" << distance << std::endl;
         if (distance < minsofar) {
             minsofar = distance;
+            minindex = i;
         }
     }
     
-    std::cout << minsofar << std::endl;
-    return minsofar;
+    return minindex;
 }
 
 // Rajzolas, ha az alkalmazas ablak ervenytelenne valik, akkor ez a fuggveny hivodik meg
