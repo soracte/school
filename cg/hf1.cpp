@@ -149,8 +149,42 @@ void drawSeparators() {
 
 inline float sqr(float x) { return x * x; }
 inline float cub(float x) { return x * x * x; }
-inline float convx(float c) { return (c - 300) / 300.f; }
-inline float convy(float c) { return (c - 300) / -300.f; }
+
+int determineQuarter(Vector v) {
+    if (v.x > 300) {
+        if (v.y > 300) {
+            return 4;
+        }
+        
+        return 1;
+    }
+
+    return v.y > 300 ? 3 : 2;
+}
+
+Vector conv(Vector v, int quarter) { 
+    float a = (v.x - 300) / 300;
+    float b = (v.y - 300) / -300;
+    Vector base;
+    Vector shift; 
+
+    switch (quarter) {
+        case 2:
+            shift = Vector(0.5, -0.5, 0);
+            base = Vector(a, b);
+            break;
+        case 3:
+            shift = Vector(0, 0.5, 0.5);
+            base = Vector(0, a, b);
+            break;
+        case 4:
+            shift = Vector(-0.5, 0, 0.5); 
+            base = Vector(a, 0, b); 
+            break;
+    }
+    
+    return (base + shift) * 2;        
+}
 
 float computeTime(Vector pi, Vector vi, Vector pi1, Vector vi1) {
     float a = -1.5 * (pi.x - pi1.x);
@@ -210,9 +244,9 @@ void drawPoints() {
 void onDisplay( ) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // kepernyo torles
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);		// torlesi szin beallitasa
-    glColor3f(1.0f, 1.0f, 1.0f);
+    glColor3f(0.5f, 0.5f, 0.5f);
 
-    //drawSeparators();
+    drawSeparators();
     drawPoints();
 //  p[0] = Vector(-0.5, 0);
 //  p[1] = Vector(-0.25, 0.15);
@@ -236,9 +270,6 @@ void onDisplay( ) {
     glBegin(GL_LINE_STRIP);
     for (int i = 0; i < pCount - 1; i++) {
         float dt = t[i + 1] - t[i];
-//      std::cout << "SECTION " << i << std::endl;
-//      std::cout << "tangent vector at beginning: " << v[i].x << ";" << v[i].y << std::endl;
-//      std::cout << "dt " << dt << std::endl;
         for (double tt = t[i]; tt < t[i + 1]; tt += 0.02) {
             Vector d = p[i];
             Vector c = v[i];
@@ -281,8 +312,13 @@ void onKeyboardUp(unsigned char key, int x, int y) {
 void onMouse(int button, int state, int x, int y) {
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {  // A GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON illetve GLUT_DOWN / GLUT_UP
 		glutPostRedisplay(); 						 // Ilyenkor rajzold ujra a kepet
-        p[pCount++] = Vector(convx(x), convy(y));
-        std::cout << convx(x) << ";" << convy(y) << std::endl;
+
+        Vector v(x, y);
+        int quarter = determineQuarter(v);
+        if (quarter != 1) {
+            p[pCount++] = conv(v, quarter);
+            std::cout << p[pCount - 1].x << ";" << p[pCount - 1].y << ";" << p[pCount - 1].z << std::endl;
+        }
 	}
 }
 
