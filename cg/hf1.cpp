@@ -207,6 +207,11 @@ Vector p[100];
 Vector v[100];
 float t[100];
 int pCount;
+long currentTime = 0;
+bool markerVisible = false;
+Vector markerPosition;
+int markerSection = 0;
+float markerTime;
 
 void recalcV() {
     v[0] = Vector();
@@ -298,21 +303,26 @@ void drawPoints() {
     }
 } 
 
+Vector findPositionVector(int i, float progressInSection, View view) {
+    float dt = t[i + 1] - t[i];
+
+    Vector d = p[i];
+    Vector c = v[i];
+    Vector b = ((p[i + 1]-p[i])*3) * (1/sqr(dt)) - ((v[i + 1]+v[i]*2)*(1/dt));
+    Vector a = ((p[i]-p[i + 1])*2) * (1/cub(dt)) + ((v[i + 1]+v[i])*(1/sqr(dt)));
+
+    Vector r = a * cub(progressInSection) + b * sqr(progressInSection) + c * progressInSection + d;
+    return findVectorToDraw(r, view);
+}
 
 
 void drawCurve(View view) {
     glBegin(GL_LINE_STRIP);
     for (int i = 0; i < pCount - 1; i++) {
-        float dt = t[i + 1] - t[i];
         for (double tt = t[i]; tt < t[i + 1]; tt += 0.02) {
-            Vector d = p[i];
-            Vector c = v[i];
-            Vector b = ((p[i + 1]-p[i])*3) * (1/sqr(dt)) - ((v[i + 1]+v[i]*2)*(1/dt));
-            Vector a = ((p[i]-p[i + 1])*2) * (1/cub(dt)) + ((v[i + 1]+v[i])*(1/sqr(dt)));
-
             float progressInSection = tt - t[i];
-            Vector r = a * cub(progressInSection) + b * sqr(progressInSection) + c * progressInSection + d;
-            Vector point = findVectorToDraw(r, view);
+            Vector point = findPositionVector(i, progressInSection, view);
+
             if (shouldDrawVector(point, view)) {
                 glVertex2f(point.x, point.y); 
             }
@@ -337,7 +347,6 @@ int findClosestIndex(Vector point) {
 
     float minsofar = (point - p[0]).Length();
     int minindex = 0;
-    std::cout << "0@" << minsofar << std::endl;
     float distance;
 
     for (int i = 1; i < pCount; i++) {
@@ -371,6 +380,9 @@ void onDisplay( ) {
     drawCurve(FRONT);
     drawCurve(RIGHT);
 
+    if (markerVisible) {
+        drawPointAtPosition(markerPosition);
+    }
 
     glutSwapBuffers();     				// Buffercsere: rajzolas vege
 
@@ -379,6 +391,11 @@ void onDisplay( ) {
 // Billentyuzet esemenyeket lekezelo fuggveny (lenyomas)
 void onKeyboard(unsigned char key, int x, int y) {
     if (key == 'd') glutPostRedisplay( ); 		// d beture rajzold ujra a kepet
+    if (key == ' ') {
+        markerSection = 0;
+        markerTime = 0;
+        markerVisible = !markerVisible;
+    }
 
 }
 
@@ -413,9 +430,37 @@ void onMouseMotion(int x, int y)
 
 }
 
+void simulateWorld(long tstart, long tend) {
+    for (long te = tstart; te < tend; te += 1) {
+        markerTime += 0.001;
+        if (t[markerSection + 1] < markerTime) {
+            markerSection++;
+        }
+
+        if (markerSection == pCount) {
+            markerSection = 0;
+            markerTime = 0;
+        }
+
+
+        markerPosition = findPositionVector(markerSection, markerTime - t[markerSection], TOP); 
+        //        std::cout << markerSection << std::endl;
+    //     std::cout << point.x << ";" << point.y << std::endl;
+    }
+
+    glutPostRedisplay();
+}
+        
+        
+
 // `Idle' esemenykezelo, jelzi, hogy az ido telik, az Idle esemenyek frekvenciajara csak a 0 a garantalt minimalis ertek
 void onIdle( ) {
-    long time = glutGet(GLUT_ELAPSED_TIME);		// program inditasa ota eltelt ido
+    long oldTime = currentTime;
+    currentTime = glutGet(GLUT_ELAPSED_TIME);		// program inditasa ota eltelt ido
+       
+    if (markerVisible) {
+        simulateWorld(oldTime, currentTime);
+    }
 }
 
 // ...Idaig modosithatod
