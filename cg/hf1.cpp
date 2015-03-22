@@ -174,12 +174,12 @@ Vector conv(Vector v, int quarter) {
             base = Vector(a, b);
             break;
         case 3:
-            shift = Vector(0, 0.5, 0.5);
-            base = Vector(0, a, b);
+            shift = Vector(0.5, 0, 0.5);
+            base = Vector(a, 0, b);
             break;
         case 4:
-            shift = Vector(-0.5, 0, 0.5); 
-            base = Vector(a, 0, b); 
+            shift = Vector(0, -0.5, 0.5); 
+            base = Vector(0, a, b); 
             break;
     }
 
@@ -209,7 +209,7 @@ float t[100];
 int pCount;
 long currentTime = 0;
 bool markerVisible = false;
-Vector markerPosition;
+Vector markerPositions[3];
 int markerSection = 0;
 float markerTime;
 
@@ -240,6 +240,7 @@ void recalcT() {
         t[i + 1] = t[i] + computeTime(p[i], v[i], p[i + 1], v[i + 1]);
     }
 }
+
 enum View { TOP, FRONT, RIGHT };
 
 Vector findVectorToDraw(Vector r, View view) {
@@ -252,11 +253,11 @@ Vector findVectorToDraw(Vector r, View view) {
             shift = Vector(-0.5, 0.5);
             break;
         case FRONT:
-            base = Vector(r.y, r.z);
+            base = Vector(r.x, r.z);
             shift = Vector(-0.5, -0.5);
             break;
         case RIGHT:
-            base = Vector(r.x, r.z);
+            base = Vector(r.y, r.z);
             shift = Vector(0.5, -0.5);
             break;
     }
@@ -335,6 +336,7 @@ const Color GREY = Color(0.3f, 0.3f, 0.3f);
 const Color WHITE = Color(1.0f, 1.0f, 1.0f);
 const Color RED = Color(1.0f, 0.0f, 0.0f);
 const Color YELLOW = Color(1.0f, 1.0f, 0.0f);
+const Color GREEN = Color(0.0f, 1.0f, 0.0f);
 
 void changeColor(Color color) {
     glColor3f(color.r, color.g, color.b);
@@ -357,7 +359,7 @@ int findClosestIndex(Vector point) {
             minindex = i;
         }
     }
-    
+
     return minindex;
 }
 
@@ -381,7 +383,10 @@ void onDisplay( ) {
     drawCurve(RIGHT);
 
     if (markerVisible) {
-        drawPointAtPosition(markerPosition);
+        changeColor(GREEN);
+        for (int i = 0; i < 3 ; i++) {
+            drawPointAtPosition(markerPositions[i]);
+        }
     }
 
     glutSwapBuffers();     				// Buffercsere: rajzolas vege
@@ -430,6 +435,10 @@ void onMouseMotion(int x, int y)
 
 }
 
+void setMarkerPosition(View view) {
+    markerPositions[view] = findPositionVector(markerSection, markerTime - t[markerSection], view); 
+}
+
 void simulateWorld(long tstart, long tend) {
     for (long te = tstart; te < tend; te += 1) {
         markerTime += 0.001;
@@ -442,22 +451,22 @@ void simulateWorld(long tstart, long tend) {
             markerTime = 0;
         }
 
-
-        markerPosition = findPositionVector(markerSection, markerTime - t[markerSection], TOP); 
-        //        std::cout << markerSection << std::endl;
-    //     std::cout << point.x << ";" << point.y << std::endl;
+        setMarkerPosition(TOP);
+        setMarkerPosition(FRONT);
+        setMarkerPosition(RIGHT);
+        
     }
 
     glutPostRedisplay();
 }
-        
-        
+
+
 
 // `Idle' esemenykezelo, jelzi, hogy az ido telik, az Idle esemenyek frekvenciajara csak a 0 a garantalt minimalis ertek
 void onIdle( ) {
     long oldTime = currentTime;
     currentTime = glutGet(GLUT_ELAPSED_TIME);		// program inditasa ota eltelt ido
-       
+
     if (markerVisible) {
         simulateWorld(oldTime, currentTime);
     }
