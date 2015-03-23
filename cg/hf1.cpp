@@ -58,11 +58,6 @@
 #include <GL/glut.h>                                                                                                                                                                                                              
 #endif          
 
-#include <iostream>
-#include <cstdio>
-
-
-
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Innentol modosithatod...
 
