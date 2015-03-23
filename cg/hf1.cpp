@@ -214,6 +214,7 @@ Vector actualMarkerVelocity;
 int markerSection = 0;
 float markerTime;
 Vector markerVelocities[3];
+int placingQuarter = 2;
 
 void recalcV() {
     v[0] = Vector();
@@ -409,8 +410,8 @@ void onDisplay( ) {
     drawCurve(RIGHT);
 
     if (markerVisible) {
-        changeColor(GREEN);
         for (int i = 0; i < 3 ; i++) {
+            changeColor(GREEN);
             drawPointAtPosition(markerPositions[i]);
 
             changeColor(TAN);
@@ -447,9 +448,12 @@ void onMouse(int button, int state, int x, int y) {
 
         Vector v(x, y);
         int quarter = determineQuarter(v);
+        if (pCount == 0) {
+            placingQuarter = quarter;
+        }
         if (quarter != 1) {
             Vector actual = conv(v, quarter);
-            if (quarter == 2) {
+            if (quarter == placingQuarter) {
                 p[pCount++] = actual;
             } else {
                 int closestIndex = findClosestIndex(actual);
