@@ -210,8 +210,11 @@ int pCount;
 long currentTime = 0;
 bool markerVisible = false;
 Vector markerPositions[3];
+Vector actualMarker;
+Vector actualMarkerVelocity;
 int markerSection = 0;
 float markerTime;
+Vector markerVelocities[3];
 
 void recalcV() {
     v[0] = Vector();
@@ -304,16 +307,41 @@ void drawPoints() {
     }
 } 
 
-Vector findPositionVector(int i, float progressInSection, View view) {
+Vector coeffs[4];
+
+void recalcCoeffs(int i) {
     float dt = t[i + 1] - t[i];
 
-    Vector d = p[i];
-    Vector c = v[i];
-    Vector b = ((p[i + 1]-p[i])*3) * (1/sqr(dt)) - ((v[i + 1]+v[i]*2)*(1/dt));
-    Vector a = ((p[i]-p[i + 1])*2) * (1/cub(dt)) + ((v[i + 1]+v[i])*(1/sqr(dt)));
+    coeffs[0] = p[i];
+    coeffs[1] = v[i];
+    coeffs[2] = ((p[i + 1]-p[i])*3) * (1/sqr(dt)) - ((v[i + 1]+v[i]*2)*(1/dt));
+    coeffs[3] = ((p[i]-p[i + 1])*2) * (1/cub(dt)) + ((v[i + 1]+v[i])*(1/sqr(dt)));
+}
 
-    Vector r = a * cub(progressInSection) + b * sqr(progressInSection) + c * progressInSection + d;
+Vector findRawPositionVector(int i, float progressInSection) {
+    recalcCoeffs(i);
+    Vector d = coeffs[0];
+    Vector c = coeffs[1];
+    Vector b = coeffs[2];
+    Vector a = coeffs[3];
+
+    return a * cub(progressInSection) + b * sqr(progressInSection) + c * progressInSection + d;
+}
+
+Vector findPositionVector(int i, float progressInSection, View view) {
+    Vector r = findRawPositionVector(i, progressInSection);
     return findVectorToDraw(r, view);
+}
+
+Vector findVelocity(float p) {
+    Vector c = coeffs[1];
+    Vector b = coeffs[2];
+    Vector a = coeffs[3];
+
+
+    Vector vel = a * sqr(p) * 3 + b * p * 2 + c;
+//    return findVectorToDraw(vel, view);
+      return vel * 0.5;
 }
 
 
@@ -334,9 +362,9 @@ void drawCurve(View view) {
 
 const Color GREY = Color(0.3f, 0.3f, 0.3f);
 const Color WHITE = Color(1.0f, 1.0f, 1.0f);
-const Color RED = Color(1.0f, 0.0f, 0.0f);
 const Color YELLOW = Color(1.0f, 1.0f, 0.0f);
 const Color GREEN = Color(0.0f, 1.0f, 0.0f);
+const Color TAN = Color(0.9f, 0.6f, 0.5f);
 
 void changeColor(Color color) {
     glColor3f(color.r, color.g, color.b);
@@ -353,7 +381,6 @@ int findClosestIndex(Vector point) {
 
     for (int i = 1; i < pCount; i++) {
         distance = (point - p[i]).Length();
-        std::cout << i << "@" << distance << std::endl;
         if (distance < minsofar) {
             minsofar = distance;
             minindex = i;
@@ -386,6 +413,12 @@ void onDisplay( ) {
         changeColor(GREEN);
         for (int i = 0; i < 3 ; i++) {
             drawPointAtPosition(markerPositions[i]);
+
+            changeColor(TAN);
+            glBegin(GL_LINES);
+            glVertex2f(markerPositions[i].x, markerPositions[i].y);
+            glVertex2f(markerVelocities[i].x, markerVelocities[i].y);
+            glEnd();
         }
     }
 
@@ -397,9 +430,9 @@ void onDisplay( ) {
 void onKeyboard(unsigned char key, int x, int y) {
     if (key == 'd') glutPostRedisplay( ); 		// d beture rajzold ujra a kepet
     if (key == ' ') {
+        markerVisible = !markerVisible;
         markerSection = 0;
         markerTime = 0;
-        markerVisible = !markerVisible;
     }
 
 }
@@ -435,8 +468,20 @@ void onMouseMotion(int x, int y)
 
 }
 
+void refreshActualMarker() {
+    actualMarker = findRawPositionVector(markerSection, markerTime - t[markerSection]);
+}
+
+void refreshActualMarkerVelocity() {
+    actualMarkerVelocity = findVelocity(markerTime - t[markerSection]);
+}
+
 void setMarkerPosition(View view) {
-    markerPositions[view] = findPositionVector(markerSection, markerTime - t[markerSection], view); 
+    markerPositions[view] = findVectorToDraw(actualMarker, view); 
+}
+
+void setMarkerVelocities(View view) {
+    markerVelocities[view] = findVectorToDraw(actualMarker - actualMarkerVelocity, view);
 }
 
 void simulateWorld(long tstart, long tend) {
@@ -451,10 +496,17 @@ void simulateWorld(long tstart, long tend) {
             markerTime = 0;
         }
 
+        refreshActualMarker();
+
         setMarkerPosition(TOP);
         setMarkerPosition(FRONT);
         setMarkerPosition(RIGHT);
-        
+
+        refreshActualMarkerVelocity();
+
+        setMarkerVelocities(TOP);
+        setMarkerVelocities(FRONT);
+        setMarkerVelocities(RIGHT);
     }
 
     glutPostRedisplay();
