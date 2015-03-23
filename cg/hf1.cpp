@@ -182,6 +182,10 @@ Vector conv(Vector v, int quarter) {
 }
 
 float computeTime(Vector pi, Vector vi, Vector pi1, Vector vi1) {
+    // A Simpson-formula az ivhossz kozelitesehez, ami alapjan a kepletet
+    // keszitettem, innen szarmazik (344. oldal):
+    // https://books.google.com/books?id=HurESoDQljcC&pg=PA344
+
     float a = -1.5 * (pi.x - pi1.x);
     float b = -0.25 * vi1.x - 0.25 * vi.x;
     float c = -1.5 * (pi.y - pi1.y);
