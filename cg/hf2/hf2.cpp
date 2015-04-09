@@ -90,6 +90,8 @@ struct Vector {
 	return Vector(y*v.z-z*v.y, z*v.x - x*v.z, x*v.y - y*v.x);
    }
    float Length() { return sqrt(x * x + y * y + z * z); }
+
+   Vector Normalize() { return *this * (1 / Length()); }
 };
  
 //--------------------------------------------------------
@@ -115,42 +117,92 @@ struct Color {
    }
 };
 
-const int screenWidth = 600;	// alkalmazás ablak felbontása
-const int screenHeight = 600;
+
+//--------------------------------------------------------
+// Kepernyo 
+//--------------------------------------------------------
+struct Screen {
+  static const int XM = 600;
+  static const int YM = 600;
+};
+//--------------------------------------------------------
+// Anyag 
+//--------------------------------------------------------
+struct Material {
+  Color F0, n, kd, ks;
+  float shininess;
+
+  virtual bool isReflective() = 0;
+  virtual Vector reflect(Vector v, Vector n) = 0;
+};
+
+struct SmoothMaterial : Material {
+  bool isReflective() {
+    return true;
+  }
+  
+  Vector reflect(Vector v, Vector n) {
+   return v - n * (n * v) * 2.0f;
+  }
+};
+
+struct RoughMaterial : Material {
+  Color shade(Vector n, Vector v, Vector l, Color inRad) {
+    Color reflRad;
+
+    float cosTheta = n * l;
+    if (cosTheta < 0) {
+      return reflRad;
+    }
+
+    reflRad = inRad * kd * cosTheta;
+    Vector h = (v + l).Normalize();
+    float cosDelta = n * h;
+    if (cosDelta < 0) {
+      return reflRad;
+    }
+
+    return reflRad + inRad * ks * pow(cosDelta, shininess);
+  }
+};
 
 
-Color image[screenWidth*screenHeight];	// egy alkalmazás ablaknyi kép
 
+
+
+//--------------------------------------------------------
+// Sugar 
+//--------------------------------------------------------
+struct Ray {
+  Vector origin, dir;
+
+  Ray(Vector origin, Vector dir) : origin(origin), dir(dir) { }
+};
+
+
+//--------------------------------------------------------
+// Kamera 
+//--------------------------------------------------------
+struct Camera {
+  Vector lookat, ahead, right, up, eye;
+
+  Ray GetRay(float x, float y) {
+    Vector raydir = ahead + 
+      right * (2 * x / Screen::XM- 1) +
+      up * (2 * y / Screen::YM - 1);
+    return Ray(eye, raydir);
+  }
+};
 
 // Inicializacio, a program futasanak kezdeten, az OpenGL kontextus letrehozasa utan hivodik meg (ld. main() fv.)
 void onInitialization( ) { 
-	glViewport(0, 0, screenWidth, screenHeight);
-
-    // Peldakent keszitunk egy kepet az operativ memoriaba
-    for(int Y = 0; Y < screenHeight; Y++)
-		for(int X = 0; X < screenWidth; X++)
-			image[Y*screenWidth + X] = Color((float)X/screenWidth, (float)Y/screenHeight, 0);
-
+	glViewport(0, 0, Screen::XM, Screen::YM);
 }
 
 // Rajzolas, ha az alkalmazas ablak ervenytelenne valik, akkor ez a fuggveny hivodik meg
 void onDisplay( ) {
-    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);		// torlesi szin beallitasa
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);		// torlesi szin beallitasa
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // kepernyo torles
-
-    // ..
-
-    // Peldakent atmasoljuk a kepet a rasztertarba
-    glDrawPixels(screenWidth, screenHeight, GL_RGB, GL_FLOAT, image);
-    // Majd rajzolunk egy kek haromszoget
-	glColor3f(0, 0, 1);
-	glBegin(GL_TRIANGLES);
-		glVertex2f(-0.2f, -0.2f);
-		glVertex2f( 0.2f, -0.2f);
-		glVertex2f( 0.0f,  0.2f);
-	glEnd( );
-
-    // ...
 
     glutSwapBuffers();     				// Buffercsere: rajzolas vege
 
