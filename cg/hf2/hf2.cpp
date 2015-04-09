@@ -117,6 +117,7 @@ struct Color {
    }
 };
 
+inline float sq(float x) { return x * x; }
 
 //--------------------------------------------------------
 // Kepernyo 
@@ -125,6 +126,41 @@ struct Screen {
   static const int XM = 600;
   static const int YM = 600;
 };
+
+//--------------------------------------------------------
+// Fenyforras 
+//--------------------------------------------------------
+struct Light {
+  float ka;
+  Vector p;
+  Color Lout;
+
+  Vector getLightDir(Vector from) {
+    return (p - from).Normalize();
+  }
+
+  virtual Color getInRad(Vector from) = 0;
+
+  float getDistance(Vector from) {
+    return (p - from).Length();
+  }
+};
+
+struct AmbientLight : Light {
+  Color getInRad(Vector from) {
+    return Lout * ka;
+  }
+};
+
+struct PointLight : Light {
+  Color getInRad(Vector from) {
+    return Lout * (1 / sq(getDistance(from))); 
+  }
+};
+
+
+
+
 //--------------------------------------------------------
 // Anyag 
 //--------------------------------------------------------
