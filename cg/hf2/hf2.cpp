@@ -128,12 +128,21 @@ struct Screen {
 };
 
 //--------------------------------------------------------
+// Szinek 
+//--------------------------------------------------------
+const Color WHITE = Color(1.0f, 1.0f, 1.0f);
+const Color BLACK = Color(0.0f, 0.0f, 0.0f);
+
+//--------------------------------------------------------
 // Fenyforras 
 //--------------------------------------------------------
 struct Light {
   float ka;
   Vector p;
-  Color Lout;
+  Color lout;
+
+  Light() {}
+  Light(float ka, Vector p, Color lout) : ka(ka), p(p), lout(lout) { }
 
   Vector getLightDir(Vector from) {
     return (p - from).Normalize();
@@ -147,17 +156,21 @@ struct Light {
 };
 
 struct AmbientLight : Light {
+  AmbientLight() {}
+  AmbientLight(float ka, Color lout) : Light(ka, Vector(), lout) {}
+
   Color getInRad(Vector from) {
-    return Lout * ka;
+    return lout * ka;
   }
 };
 
 struct PointLight : Light {
+  PointLight() {}
+  PointLight(float ka, Vector p, Color lout) : Light(ka, p, lout) {}
   Color getInRad(Vector from) {
-    return Lout * (1 / sq(getDistance(from))); 
+    return lout * (1 / sq(getDistance(from))); 
   }
 };
-
 
 
 
@@ -169,7 +182,9 @@ struct Material {
   float shininess;
 
   virtual bool isReflective() = 0;
-  virtual Vector reflect(Vector v, Vector n) = 0;
+  virtual Vector reflect(Vector inDir, Vector n) = 0;
+  virtual Color shade(Vector n, Vector viewDir, Vector l, Color inRad) = 0;
+  virtual Color fresnel(Vector inDir, Vector n) = 0;
 };
 
 struct SmoothMaterial : Material {
@@ -177,13 +192,30 @@ struct SmoothMaterial : Material {
     return true;
   }
   
-  Vector reflect(Vector v, Vector n) {
-   return v - n * (n * v) * 2.0f;
+  Vector reflect(Vector inDir, Vector n) {
+   return inDir - n * (n * inDir) * 2.0f;
+  }
+
+  Color shade(Vector n, Vector viewDir, Vector l, Color inRad) {
+    return Color();
+  }
+
+  Color fresnel(Vector inDir, Vector n) {
+    float cosa = fabs(n * inDir);
+    return F0 + (Color(1.0f, 1.0f, 1.0f) + (F0 * -1.0f)) * pow(1 - cosa, 5);
   }
 };
 
 struct RoughMaterial : Material {
-  Color shade(Vector n, Vector v, Vector l, Color inRad) {
+  bool isReflective() {
+    return false;
+  }
+
+  Vector reflect(Vector inDir, Vector n) {
+    return Vector();
+  }
+
+  Color shade(Vector n, Vector viewDir, Vector l, Color inRad) {
     Color reflRad;
 
     float cosTheta = n * l;
@@ -192,7 +224,7 @@ struct RoughMaterial : Material {
     }
 
     reflRad = inRad * kd * cosTheta;
-    Vector h = (v + l).Normalize();
+    Vector h = (viewDir + l).Normalize();
     float cosDelta = n * h;
     if (cosDelta < 0) {
       return reflRad;
@@ -200,10 +232,22 @@ struct RoughMaterial : Material {
 
     return reflRad + inRad * ks * pow(cosDelta, shininess);
   }
+
+  Color fresnel(Vector inDir, Vector n) {
+    return Color();
+  }
 };
 
-
-
+//--------------------------------------------------------
+// Metszespont 
+//--------------------------------------------------------
+struct Hit {
+  float t;
+  Vector pos;
+  Vector n;
+  Material* material;
+  Hit () { t = -1; }
+};
 
 
 //--------------------------------------------------------
@@ -215,6 +259,26 @@ struct Ray {
   Ray(Vector origin, Vector dir) : origin(origin), dir(dir) { }
 };
 
+//--------------------------------------------------------
+// Objektum 
+//--------------------------------------------------------
+struct Intersectable {
+  Material* material;
+  virtual Hit intersect(const Ray& ray) = 0;
+};
+
+
+//--------------------------------------------------------
+// Sik 
+//--------------------------------------------------------
+struct Plane : Intersectable {
+  Material* material;
+  Hit intersect(const Ray& ray) {
+    // TODO implement
+    return Hit();
+  } 
+};
+
 
 //--------------------------------------------------------
 // Kamera 
@@ -222,11 +286,78 @@ struct Ray {
 struct Camera {
   Vector lookat, ahead, right, up, eye;
 
+  Camera() {}
+  Camera(Vector eye, Vector lookat, Vector up) {
+    ahead = lookat - eye;
+    right = (up % ahead).Normalize();
+  }
+
   Ray GetRay(float x, float y) {
     Vector raydir = ahead + 
       right * (2 * x / Screen::XM- 1) +
       up * (2 * y / Screen::YM - 1);
-    return Ray(eye, raydir);
+    return Ray(eye, raydir.Normalize());
+  }
+};
+
+
+//--------------------------------------------------------
+// Jelenet 
+//--------------------------------------------------------
+struct Scene {
+  Intersectable* objects[10];
+  Camera cam;
+  AmbientLight amLight;
+  PointLight pointLight;
+  int objCount;
+
+  Scene() {
+    cam = Camera(Vector(0.0f, 0.0f, -1.0f), Vector(0.0f, 0.0f, 0.0f), 
+        Vector(0.0f, 1.0f, 0.0f));
+    amLight = AmbientLight(1.0f, WHITE);
+    pointLight = PointLight(1.0f, Vector(0.5f, -0.5f, 0.8f), WHITE);
+    objCount = 0;
+  }
+
+  void build() {
+    // TODO add objects
+  }
+
+  Hit firstIntersect(Ray ray) {
+    Hit bestHit;
+
+    for (int i = 0; i < objCount; i++) {
+      Intersectable* obj = objects[i];
+      Hit hit = obj->intersect(ray);
+      if (hit.t > 0 && (bestHit.t < 0 || hit.t < bestHit.t)) {
+        bestHit = hit;
+      }
+    }
+
+    return bestHit;
+  }
+
+  Color trace(Ray ray) {
+    Hit hit = firstIntersect(ray);
+    if (hit.t < 0) {
+      return amLight.getInRad(Vector());
+    }
+
+    Vector n = hit.n;
+    Vector v = (ray.dir * -1).Normalize();
+    Vector l = pointLight.getLightDir(hit.pos);
+    Color inRad = pointLight.getInRad(hit.pos);
+    Color outRadiance = hit.material->shade(n, v, l, inRad);
+
+    if (hit.material->isReflective()) {
+      Vector inDir = v * -1.0;
+      Vector reflectionDir = hit.material->reflect(inDir, n);
+      Ray reflectedRay(hit.pos, reflectionDir);
+      outRadiance = outRadiance +
+        trace(reflectedRay) * hit.material->fresnel(inDir, n);
+    }
+
+    return outRadiance;
   }
 };
 
