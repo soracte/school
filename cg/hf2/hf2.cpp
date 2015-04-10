@@ -340,9 +340,10 @@ struct Sphere : Intersectable {
 
 struct Triangle : Intersectable {
   Vector a, b, c;
+  bool inverse;
 
-  Triangle(Material* material, Vector a, Vector b, Vector c) :
-    Intersectable(material), a(a), b(b), c(c) { }
+  Triangle(Material* material, Vector a, Vector b, Vector c, bool inverse) :
+    Intersectable(material), a(a), b(b), c(c), inverse(inverse) { }
 
   Hit intersect(const Ray& ray) {
     if (aeq(ray.dir.x, 0.1f) && aeq(ray.dir.y, 0.4f)) {
@@ -352,6 +353,10 @@ struct Triangle : Intersectable {
     Vector eye = ray.origin;
     Vector v = ray.dir;
     Vector n = ((b - a) % (c - a)).Normalize();
+
+    if (inverse) {
+      n = n * -1;
+    }
 
     float t = ((a - eye) * n) / (v * n);
     if (t < 0.0f) {
@@ -367,6 +372,10 @@ struct Triangle : Intersectable {
   }
 
   bool isIntersectionInside(Vector p, Vector n) {
+    if (inverse) {
+      n = n * -1;
+    }
+
     return ((b - a) % (p - a)) * n > 0.0f &&
       ((c - b) % (p - b)) * n > 0.0f &&
       ((a - c) % (p - c)) * n > 0.0f;
@@ -383,50 +392,53 @@ struct Mesh : Intersectable {
   Mesh(Material* material) : Intersectable(material), vertCount(0) { }
 
   Hit intersect(const Ray& ray) {
+    bool inverse = false;
     for (int i = 0; i < vertCount; i++) {
       Triangle triangle(material, vertices[i],
-          vertices[(i + 1) % vertCount],   
-          vertices[(i + 2) % vertCount]);
+          vertices[(i + 1) % vertCount], vertices[(i + 2) % vertCount],
+          inverse);
 
       Hit triangleHit = triangle.intersect(ray);
       if (triangleHit.t >= 0.0f) {
         return triangleHit;
       }
+
+      inverse = !inverse;
     }
 
     return Hit();
   }
 
   //TODO DEBUG
-  void draw() {
-    for (int i = 0; i < 10; i++) {
-      Triangle triangle(material, vertices[i],
-          vertices[(i + 1) % vertCount],   
-          vertices[(i + 2) % vertCount]);
+//void draw() {
+//  for (int i = 0; i < 10; i++) {
+//    Triangle triangle(material, vertices[i],
+//        vertices[(i + 1) % vertCount],   
+//        vertices[(i + 2) % vertCount]);
 
-      std::cout << "triangle #" << i << std::endl;
+//    std::cout << "triangle #" << i << std::endl;
 
-      glBegin(GL_LINE_STRIP); {
-        Vector a = triangle.a;
-        Vector b = triangle.b;
-        Vector c = triangle.c;
-    std::cout << a.x << ";" << a.y << ";" << a.z << 
-         std::endl; 
-    std::cout << b.x << ";" << b.y << ";" << b.z << 
-         std::endl; 
-    std::cout << c.x << ";" << c.y << ";" << c.z << 
-         std::endl; 
+//    glBegin(GL_LINE_STRIP); {
+//      Vector a = triangle.a;
+//      Vector b = triangle.b;
+//      Vector c = triangle.c;
+//  std::cout << a.x << ";" << a.y << ";" << a.z << 
+//       std::endl; 
+//  std::cout << b.x << ";" << b.y << ";" << b.z << 
+//       std::endl; 
+//  std::cout << c.x << ";" << c.y << ";" << c.z << 
+//       std::endl; 
 
-        glVertex3f(a.x, a.y, a.z);
-        glVertex3f(b.x, b.y, b.z);
-        glVertex3f(c.x, c.y, c.z);
-        }
-      std::cout << std::endl;
-      glEnd();
-      }
+//      glVertex3f(a.x, a.y, a.z);
+//      glVertex3f(b.x, b.y, b.z);
+//      glVertex3f(c.x, c.y, c.z);
+//      }
+//    std::cout << std::endl;
+//    glEnd();
+//    }
 
 
-  }
+//}
 
 
 
@@ -549,8 +561,8 @@ struct Scene {
     redMaterial->kd = Color(1.0f, 0.0f, 0.0f);
     redMaterial->ks = Color(1.0f, 0.0f, 0.0f);
     redMaterial->shininess = 50;
-    Torus torus = Torus(redMaterial, Vector(0.0f, 0.0f, -1.0f),
-        0.2f, 0.6f, 4, 4);
+    Torus torus = Torus(redMaterial, Vector(0.0f, 0.0f, 0.0f),
+        0.2f, 0.6f, 6, 4);
     objects[objCount++] = torus.toMesh();
 //    ((Mesh*)torus.toMesh())->draw();
   }
@@ -597,7 +609,7 @@ struct Scene {
     Color image[Screen::XM*Screen::YM];
     for (int y = 0; y < Screen::YM; y++) {
       for (int x = 0; x < Screen::XM; x++) {
-        if (x == 310 && y == 440) {
+        if (x == 320 && y == 500) {
           std::cout << "now";
         }
         Ray ray = cam.getRay(x, y);
