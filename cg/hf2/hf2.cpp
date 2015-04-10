@@ -498,9 +498,21 @@ struct Torus : Intersectable {
 // Sik 
 //--------------------------------------------------------
 struct Plane : Intersectable {
+  Vector p, n;
+
+  Plane(Material* material, Vector p, Vector n) : 
+    Intersectable(material), p(p), n(n) { }
+
   Hit intersect(const Ray& ray) {
-    // TODO implement
-    return Hit();
+    Vector v = ray.dir;
+    Vector eye = ray.origin;
+    float t = ((p - eye) * n) / (v * n);
+
+    if (t < 0.0f) {
+      return Hit();
+    }
+
+    return Hit(t, eye + v * t, n, material);
   } 
 };
 
@@ -543,7 +555,7 @@ struct Scene {
     cam = Camera(Vector(0.0f, 0.0f, 1.0f), Vector(0.0f, 0.0f, 0.0f), 
         Vector(0.0f, 1.0f, 0.0f));
     amLight = AmbientLight(1.0f, Color(0.1f, 0.1f, 0.1f));
-    pointLight = PointLight(1.0f, Vector(0.0f, 0.0f, 0.2f), WHITE);
+    pointLight = PointLight(1.0f, Vector(0.2f, 0.4f, 0.5f), WHITE);
     objCount = 0;
   }
 
@@ -556,16 +568,46 @@ struct Scene {
     delete redMaterial;
   }
 
+  void addObject(Intersectable* object) {
+    objects[objCount++] = object;
+  }
+
+  void addWalls() {
+    addObject(new Plane(redMaterial,
+        Vector(-0.8f, 0.0f, 0.0f),
+        Vector(1.0f, 0.0f, 0.0f)));
+
+    addObject(new Plane(redMaterial,
+        Vector(0.0f, 0.0f, -0.8f),
+        Vector(0.0f, 0.0f, 1.0f)));
+
+    addObject(new Plane(redMaterial,
+        Vector(0.8f, 0.0f, 0.0f),
+        Vector(-1.0f, 0.0f, 0.0f)));
+
+    addObject(new Plane(redMaterial,
+        Vector(0.0f, 0.8f, 0.0f),
+        Vector(0.0f, -1.0f, 0.0f)));
+
+    addObject(new Plane(redMaterial,
+        Vector(-0.8f, -0.8f, 0.0f),
+        Vector(0.0f, 1.0f, 0.0f)));
+  }
+
+
   void build() {
     redMaterial = new RoughMaterial();
     redMaterial->kd = Color(1.0f, 0.0f, 0.0f);
     redMaterial->ks = Color(1.0f, 0.0f, 0.0f);
     redMaterial->shininess = 50;
-    Torus torus = Torus(redMaterial, Vector(0.0f, 0.0f, 0.0f),
-        0.2f, 0.6f, 6, 4);
-    objects[objCount++] = torus.toMesh();
+    Torus torus = Torus(redMaterial, Vector(0.0f, 0.0f, -1.0f),
+        0.2f, 0.6f, 6, 9);
+    addWalls();
+
+    //objects[objCount++] = torus.toMesh();
 //    ((Mesh*)torus.toMesh())->draw();
   }
+
 
   Hit firstIntersect(Ray ray) {
     Hit bestHit;
