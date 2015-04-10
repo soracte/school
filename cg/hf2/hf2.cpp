@@ -345,6 +345,10 @@ struct Triangle : Intersectable {
     Intersectable(material), a(a), b(b), c(c) { }
 
   Hit intersect(const Ray& ray) {
+    if (aeq(ray.dir.x, 0.1f) && aeq(ray.dir.y, 0.4f)) {
+      std::cout << "reached" << std::endl;
+    }
+
     Vector eye = ray.origin;
     Vector v = ray.dir;
     Vector n = ((b - a) % (c - a)).Normalize();
@@ -395,20 +399,33 @@ struct Mesh : Intersectable {
 
   //TODO DEBUG
   void draw() {
-    for (int i = 0; i < vertCount; i++) {
+    for (int i = 0; i < 10; i++) {
       Triangle triangle(material, vertices[i],
           vertices[(i + 1) % vertCount],   
           vertices[(i + 2) % vertCount]);
+
+      std::cout << "triangle #" << i << std::endl;
+
       glBegin(GL_LINE_STRIP); {
-        for (int i = 0; i < vertCount; i++) {
-          Vector vert = vertices[i];
-          glVertex3f(vert.x, vert.y, vert.z);
+        Vector a = triangle.a;
+        Vector b = triangle.b;
+        Vector c = triangle.c;
+    std::cout << a.x << ";" << a.y << ";" << a.z << 
+         std::endl; 
+    std::cout << b.x << ";" << b.y << ";" << b.z << 
+         std::endl; 
+    std::cout << c.x << ";" << c.y << ";" << c.z << 
+         std::endl; 
+
+        glVertex3f(a.x, a.y, a.z);
+        glVertex3f(b.x, b.y, b.z);
+        glVertex3f(c.x, c.y, c.z);
         }
+      std::cout << std::endl;
+      glEnd();
       }
 
-    }
 
-    glEnd();
   }
 
 
@@ -514,7 +531,7 @@ struct Scene {
     cam = Camera(Vector(0.0f, 0.0f, 1.0f), Vector(0.0f, 0.0f, 0.0f), 
         Vector(0.0f, 1.0f, 0.0f));
     amLight = AmbientLight(1.0f, Color(0.1f, 0.1f, 0.1f));
-    pointLight = PointLight(1.0f, Vector(0.5f, 0.5f, 0.8f), WHITE);
+    pointLight = PointLight(1.0f, Vector(0.0f, 0.0f, 0.2f), WHITE);
     objCount = 0;
   }
 
@@ -532,10 +549,10 @@ struct Scene {
     redMaterial->kd = Color(1.0f, 0.0f, 0.0f);
     redMaterial->ks = Color(1.0f, 0.0f, 0.0f);
     redMaterial->shininess = 50;
-    Torus torus = Torus(redMaterial, Vector(0.0f, 0.0f, -0.3f),
-        0.1f, 0.5f, 4, 4);
-    //objects[objCount++] = torus.toMesh();
-    ((Mesh*)torus.toMesh())->draw();
+    Torus torus = Torus(redMaterial, Vector(0.0f, 0.0f, -1.0f),
+        0.2f, 0.6f, 4, 4);
+    objects[objCount++] = torus.toMesh();
+//    ((Mesh*)torus.toMesh())->draw();
   }
 
   Hit firstIntersect(Ray ray) {
@@ -580,7 +597,7 @@ struct Scene {
     Color image[Screen::XM*Screen::YM];
     for (int y = 0; y < Screen::YM; y++) {
       for (int x = 0; x < Screen::XM; x++) {
-        if (x == 300 && y == 300) {
+        if (x == 310 && y == 440) {
           std::cout << "now";
         }
         Ray ray = cam.getRay(x, y);
@@ -613,7 +630,7 @@ void onDisplay( ) {
 
   Scene scene;
   scene.build();
-  //    scene.render();
+  scene.render();
 
   glutSwapBuffers();     				// Buffercsere: rajzolas vege
   run = true;
@@ -633,7 +650,12 @@ void onKeyboardUp(unsigned char key, int x, int y) {
 // Eger esemenyeket lekezelo fuggveny
 void onMouse(int button, int state, int x, int y) {
   if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)   // A GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON illetve GLUT_DOWN / GLUT_UP
+  {
+//    std::cout << "click@(" << (2*x/600.0f-1) << ";" << -(2*y/600.0f-1) 
+ //     << ")" << std::endl;
+    std::cout << "click@ " << x << ";" << y << std::endl;
     glutPostRedisplay( ); 						 // Ilyenkor rajzold ujra a kepet
+  }
 }
 
 // Eger mozgast lekezelo fuggveny
