@@ -67,60 +67,61 @@
 // 3D Vektor
 //--------------------------------------------------------
 struct Vector {
-   float x, y, z;
+  float x, y, z;
 
-   Vector( ) { 
-	x = y = z = 0;
-   }
-   Vector(float x0, float y0, float z0 = 0) { 
-	x = x0; y = y0; z = z0;
-   }
-   Vector operator*(float a) { 
-	return Vector(x * a, y * a, z * a); 
-   }
-   Vector operator+(const Vector& v) {
- 	return Vector(x + v.x, y + v.y, z + v.z); 
-   }
-   Vector operator-(const Vector& v) {
- 	return Vector(x - v.x, y - v.y, z - v.z); 
-   }
-   float operator*(const Vector& v) { 	// dot product
-	return (x * v.x + y * v.y + z * v.z); 
-   }
-   Vector operator%(const Vector& v) { 	// cross product
-	return Vector(y*v.z-z*v.y, z*v.x - x*v.z, x*v.y - y*v.x);
-   }
-   float Length() { return sqrt(x * x + y * y + z * z); }
+  Vector( ) { 
+    x = y = z = 0;
+  }
+  Vector(float x0, float y0, float z0 = 0) { 
+    x = x0; y = y0; z = z0;
+  }
+  Vector operator*(float a) { 
+    return Vector(x * a, y * a, z * a); 
+  }
+  Vector operator+(const Vector& v) {
+    return Vector(x + v.x, y + v.y, z + v.z); 
+  }
+  Vector operator-(const Vector& v) {
+    return Vector(x - v.x, y - v.y, z - v.z); 
+  }
+  float operator*(const Vector& v) { 	// dot product
+    return (x * v.x + y * v.y + z * v.z); 
+  }
+  Vector operator%(const Vector& v) { 	// cross product
+    return Vector(y*v.z-z*v.y, z*v.x - x*v.z, x*v.y - y*v.x);
+  }
+  float Length() { return sqrt(x * x + y * y + z * z); }
 
-   Vector Normalize() { return *this * (1 / Length()); }
+  Vector Normalize() { return *this * (1 / Length()); }
 };
- 
+
 //--------------------------------------------------------
 // Spektrum illetve szin
 //--------------------------------------------------------
 struct Color {
-   float r, g, b;
+  float r, g, b;
 
-   Color( ) { 
-	r = g = b = 0;
-   }
-   Color(float r0, float g0, float b0) { 
-	r = r0; g = g0; b = b0;
-   }
-   Color operator*(float a) { 
-	return Color(r * a, g * a, b * a); 
-   }
-   Color operator*(const Color& c) { 
-	return Color(r * c.r, g * c.g, b * c.b); 
-   }
-   Color operator+(const Color& c) {
- 	return Color(r + c.r, g + c.g, b + c.b); 
-   }
+  Color( ) { 
+    r = g = b = 0;
+  }
+  Color(float r0, float g0, float b0) { 
+    r = r0; g = g0; b = b0;
+  }
+  Color operator*(float a) { 
+    return Color(r * a, g * a, b * a); 
+  }
+  Color operator*(const Color& c) { 
+    return Color(r * c.r, g * c.g, b * c.b); 
+  }
+  Color operator+(const Color& c) {
+    return Color(r + c.r, g + c.g, b + c.b); 
+  }
 };
 
 const float EPSILON = 1e-5;
 
 inline float sq(float x) { return x * x; }
+inline bool aeq(float x, float y) { return fabs(x - y) < EPSILON; }
 
 struct QuadraticEquation {
   float a, b, c;
@@ -130,15 +131,15 @@ struct QuadraticEquation {
     a(a), b(b), c(c), disc(sq(b) - 4 * a* c) { }
 
   int numOfRoots() {
-    if (disc > EPSILON) {
-      return 2;
+    if (aeq(disc, 0.0f)) {
+      return 1;
     }
 
-    if (disc < -EPSILON) {
+    if (disc < 0.0f) {
       return 0;
     }
 
-    return 1;
+    return 2;
   }
 
   float getMinSolution() {
@@ -216,6 +217,8 @@ struct Material {
   Color F0, n, kd, ks;
   float shininess;
 
+  virtual ~Material() { }
+
   virtual bool isReflective() = 0;
   virtual Vector reflect(Vector inDir, Vector n) = 0;
   virtual Color shade(Vector n, Vector viewDir, Vector l, Color inRad) = 0;
@@ -226,9 +229,9 @@ struct SmoothMaterial : Material {
   bool isReflective() {
     return true;
   }
-  
+
   Vector reflect(Vector inDir, Vector n) {
-   return inDir - n * (n * inDir) * 2.0f;
+    return inDir - n * (n * inDir) * 2.0f;
   }
 
   Color shade(Vector n, Vector viewDir, Vector l, Color inRad) {
@@ -333,8 +336,132 @@ struct Sphere : Intersectable {
 
     return Hit(t, pos, n.Normalize(), material);
   }
+};
+
+struct Triangle : Intersectable {
+  Vector a, b, c;
+
+  Triangle(Material* material, Vector a, Vector b, Vector c) :
+    Intersectable(material), a(a), b(b), c(c) { }
+
+  Hit intersect(const Ray& ray) {
+    Vector eye = ray.origin;
+    Vector v = ray.dir;
+    Vector n = ((b - a) % (c - a)).Normalize();
+
+    float t = ((a - eye) * n) / (v * n);
+    if (t < 0.0f) {
+      return Hit();
+    }
+
+    Vector intersection = eye + v * t;
+    if (!isIntersectionInside(intersection, n)) {
+      return Hit(); 
+    }
+
+    return Hit(t, intersection, n, material);
+  }
+
+  bool isIntersectionInside(Vector p, Vector n) {
+    return ((b - a) % (p - a)) * n > 0.0f &&
+      ((c - b) % (p - b)) * n > 0.0f &&
+      ((a - c) % (p - c)) * n > 0.0f;
+  }
+};
 
 
+
+
+struct Mesh : Intersectable {
+  Vector vertices[500];
+  int vertCount;
+
+  Mesh(Material* material) : Intersectable(material), vertCount(0) { }
+
+  Hit intersect(const Ray& ray) {
+    for (int i = 0; i < vertCount; i++) {
+      Triangle triangle(material, vertices[i],
+          vertices[(i + 1) % vertCount],   
+          vertices[(i + 2) % vertCount]);
+
+      Hit triangleHit = triangle.intersect(ray);
+      if (triangleHit.t >= 0.0f) {
+        return triangleHit;
+      }
+    }
+
+    return Hit();
+  }
+
+  //TODO DEBUG
+  void draw() {
+    for (int i = 0; i < vertCount; i++) {
+      Triangle triangle(material, vertices[i],
+          vertices[(i + 1) % vertCount],   
+          vertices[(i + 2) % vertCount]);
+      glBegin(GL_LINE_STRIP); {
+        for (int i = 0; i < vertCount; i++) {
+          Vector vert = vertices[i];
+          glVertex3f(vert.x, vert.y, vert.z);
+        }
+      }
+
+    }
+
+    glEnd();
+  }
+
+
+
+  void addVertex(Vector vertex) {
+    vertices[vertCount++] = vertex;
+  }
+
+};
+
+struct Torus : Intersectable {
+  Vector c;
+  float inR, bigR;
+  int inRes, bigRes;
+  Vector vertices[500];
+  int vertCount;
+
+  Torus(Material* material, Vector c,
+      float inR, float bigR, int inRes, int bigRes) :
+    Intersectable(material), inR(inR), bigR(bigR),
+    inRes(inRes), bigRes(bigRes), vertCount(0) { 
+
+      float inStep = 2 * M_PI / (float)inRes;
+      float bigStep = 2 * M_PI / (float)bigRes; 
+
+      for (int i = 0; i < bigRes; i++) {
+        for (int j = 0; j < inRes; j++) {
+          float phi = i * bigStep;
+          float theta = j * inStep;
+
+          float x = (bigR + inR * cosf(theta)) * cosf(phi);
+          float y = (bigR + inR * cosf(theta)) * sinf(phi);
+          float z = inR * sinf (theta);
+
+          vertices[vertCount++] = Vector(x, y, z) + c;
+        }
+      } 
+    }
+
+  Hit intersect(const Ray& ray) { return Hit(); }
+
+  Intersectable* toMesh() {
+    Mesh* mesh = new Mesh(material);
+
+    for (int i = 0; i < bigRes; i++) {
+      for (int j = 0; j <= inRes; j++) {
+        mesh->addVertex(vertices[i * inRes + j % inRes]);
+        mesh->addVertex(vertices[(i + 1) % bigRes * inRes + j % inRes]);
+      }
+    } 
+
+    return mesh;
+  }
 };
 
 
@@ -358,9 +485,9 @@ struct Camera {
   Camera() {}
   Camera(Vector eye, Vector lookat, Vector up) :
     eye(eye), lookat(lookat), up(up) {
-    ahead = lookat - eye;
-    right = (ahead % up).Normalize();
-  }
+      ahead = lookat - eye;
+      right = (ahead % up).Normalize();
+    }
 
   Ray getRay(float x, float y) {
     Vector raydir = ahead + 
@@ -376,6 +503,8 @@ struct Camera {
 //--------------------------------------------------------
 struct Scene {
   Intersectable* objects[10];
+  Material* goldMaterial;
+  Material* redMaterial; 
   Camera cam;
   AmbientLight amLight;
   PointLight pointLight;
@@ -393,17 +522,20 @@ struct Scene {
     for (int i = 0; i < objCount; i++) {
       delete objects[i];
     }
+
+    //delete goldMaterial;
+    delete redMaterial;
   }
 
   void build() {
-    Material* redMaterial = new RoughMaterial();
+    redMaterial = new RoughMaterial();
     redMaterial->kd = Color(1.0f, 0.0f, 0.0f);
     redMaterial->ks = Color(1.0f, 0.0f, 0.0f);
     redMaterial->shininess = 50;
-    Intersectable* sphere = 
-      new Sphere(redMaterial, 0.8f, Vector(0.0f, 0.0f, -1.5f));
-    objects[objCount++] = sphere;
-    // TODO add objects
+    Torus torus = Torus(redMaterial, Vector(0.0f, 0.0f, -0.3f),
+        0.1f, 0.5f, 4, 4);
+    //objects[objCount++] = torus.toMesh();
+    ((Mesh*)torus.toMesh())->draw();
   }
 
   Hit firstIntersect(Ray ray) {
@@ -465,32 +597,31 @@ struct Scene {
 
 // Inicializacio, a program futasanak kezdeten, az OpenGL kontextus letrehozasa utan hivodik meg (ld. main() fv.)
 void onInitialization( ) { 
-	glViewport(0, 0, Screen::XM, Screen::YM);
+  glViewport(0, 0, Screen::XM, Screen::YM);
 }
 
 bool run = false;
 
 // Rajzolas, ha az alkalmazas ablak ervenytelenne valik, akkor ez a fuggveny hivodik meg
 void onDisplay( ) {
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);		// torlesi szin beallitasa
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // kepernyo torles
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);		// torlesi szin beallitasa
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // kepernyo torles
 
-    if (run) {
-      return;
-    }
+  if (run) {
+    return;
+  }
 
-    Scene scene;
-    scene.build();
-    scene.render();
+  Scene scene;
+  scene.build();
+  //    scene.render();
 
-    glutSwapBuffers();     				// Buffercsere: rajzolas vege
-    run = true;
-
+  glutSwapBuffers();     				// Buffercsere: rajzolas vege
+  run = true;
 }
 
 // Billentyuzet esemenyeket lekezelo fuggveny (lenyomas)
 void onKeyboard(unsigned char key, int x, int y) {
-    if (key == 'd') glutPostRedisplay( ); 		// d beture rajzold ujra a kepet
+  if (key == 'd') glutPostRedisplay( ); 		// d beture rajzold ujra a kepet
 
 }
 
@@ -501,8 +632,8 @@ void onKeyboardUp(unsigned char key, int x, int y) {
 
 // Eger esemenyeket lekezelo fuggveny
 void onMouse(int button, int state, int x, int y) {
-    if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)   // A GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON illetve GLUT_DOWN / GLUT_UP
-		glutPostRedisplay( ); 						 // Ilyenkor rajzold ujra a kepet
+  if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)   // A GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON illetve GLUT_DOWN / GLUT_UP
+    glutPostRedisplay( ); 						 // Ilyenkor rajzold ujra a kepet
 }
 
 // Eger mozgast lekezelo fuggveny
@@ -513,7 +644,7 @@ void onMouseMotion(int x, int y)
 
 // `Idle' esemenykezelo, jelzi, hogy az ido telik, az Idle esemenyek frekvenciajara csak a 0 a garantalt minimalis ertek
 void onIdle( ) {
-     //long time = glutGet(GLUT_ELAPSED_TIME);		// program inditasa ota eltelt ido
+  //long time = glutGet(GLUT_ELAPSED_TIME);		// program inditasa ota eltelt ido
 
 }
 
@@ -522,29 +653,29 @@ void onIdle( ) {
 
 // A C++ program belepesi pontja, a main fuggvenyt mar nem szabad bantani
 int main(int argc, char **argv) {
-    glutInit(&argc, argv); 				// GLUT inicializalasa
-    glutInitWindowSize(600, 600);			// Alkalmazas ablak kezdeti merete 600x600 pixel 
-    glutInitWindowPosition(100, 100);			// Az elozo alkalmazas ablakhoz kepest hol tunik fel
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);	// 8 bites R,G,B,A + dupla buffer + melyseg buffer
+  glutInit(&argc, argv); 				// GLUT inicializalasa
+  glutInitWindowSize(600, 600);			// Alkalmazas ablak kezdeti merete 600x600 pixel 
+  glutInitWindowPosition(100, 100);			// Az elozo alkalmazas ablakhoz kepest hol tunik fel
+  glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);	// 8 bites R,G,B,A + dupla buffer + melyseg buffer
 
-    glutCreateWindow("Grafika hazi feladat");		// Alkalmazas ablak megszuletik es megjelenik a kepernyon
+  glutCreateWindow("Grafika hazi feladat");		// Alkalmazas ablak megszuletik es megjelenik a kepernyon
 
-    glMatrixMode(GL_MODELVIEW);				// A MODELVIEW transzformaciot egysegmatrixra inicializaljuk
-    glLoadIdentity();
-    glMatrixMode(GL_PROJECTION);			// A PROJECTION transzformaciot egysegmatrixra inicializaljuk
-    glLoadIdentity();
+  glMatrixMode(GL_MODELVIEW);				// A MODELVIEW transzformaciot egysegmatrixra inicializaljuk
+  glLoadIdentity();
+  glMatrixMode(GL_PROJECTION);			// A PROJECTION transzformaciot egysegmatrixra inicializaljuk
+  glLoadIdentity();
 
-    onInitialization();					// Az altalad irt inicializalast lefuttatjuk
+  onInitialization();					// Az altalad irt inicializalast lefuttatjuk
 
-    glutDisplayFunc(onDisplay);				// Esemenykezelok regisztralasa
-    glutMouseFunc(onMouse); 
-    glutIdleFunc(onIdle);
-    glutKeyboardFunc(onKeyboard);
-    glutKeyboardUpFunc(onKeyboardUp);
-    glutMotionFunc(onMouseMotion);
+  glutDisplayFunc(onDisplay);				// Esemenykezelok regisztralasa
+  glutMouseFunc(onMouse); 
+  glutIdleFunc(onIdle);
+  glutKeyboardFunc(onKeyboard);
+  glutKeyboardUpFunc(onKeyboardUp);
+  glutMotionFunc(onMouseMotion);
 
-    glutMainLoop();					// Esemenykezelo hurok
-    
-    return 0;
+  glutMainLoop();					// Esemenykezelo hurok
+
+  return 0;
 }
 
