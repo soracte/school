@@ -62,6 +62,7 @@
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Innentol modosithatod...
 
+#include <iostream>
 //--------------------------------------------------------
 // 3D Vektor
 //--------------------------------------------------------
@@ -117,7 +118,41 @@ struct Color {
    }
 };
 
+const float EPSILON = 1e-5;
+
 inline float sq(float x) { return x * x; }
+
+struct QuadraticEquation {
+  float a, b, c;
+  float disc;
+
+  QuadraticEquation(float a, float b, float c) : 
+    a(a), b(b), c(c), disc(sq(b) - 4 * a* c) { }
+
+  int numOfRoots() {
+    if (disc > EPSILON) {
+      return 2;
+    }
+
+    if (disc < -EPSILON) {
+      return 0;
+    }
+
+    return 1;
+  }
+
+  float getMinSolution() {
+    if (numOfRoots() == 1) {
+      return -b / (2 * a);
+    }
+
+    float first = (-b + sqrt(disc)) / (2 * a);
+    float second = (-b - sqrt(disc)) / (2 * a);
+
+    return first < second ? first : second;
+  }
+
+};
 
 //--------------------------------------------------------
 // Kepernyo 
@@ -247,6 +282,8 @@ struct Hit {
   Vector n;
   Material* material;
   Hit () { t = -1; }
+  Hit (float t, Vector pos, Vector n, Material* material) :
+    t(t), pos(pos), n(n), material(material) { }
 };
 
 
@@ -264,7 +301,40 @@ struct Ray {
 //--------------------------------------------------------
 struct Intersectable {
   Material* material;
+
+  Intersectable(Material* material) : material(material) {}
+  virtual ~Intersectable() {}
+
   virtual Hit intersect(const Ray& ray) = 0;
+};
+
+struct Sphere : Intersectable {
+  float r;
+  Vector c;
+
+  Sphere(Material* material, float r, Vector c) :
+    Intersectable(material), r(r), c(c) { }
+
+  Hit intersect(const Ray& ray) {
+    Vector v = ray.dir;
+    Vector eye = ray.origin;
+    float c2  = v * v;
+    float c1 = 2 * ((eye - c) * v);
+    float c0 = ((eye - c)*(eye-c)) - sq(r);
+
+    QuadraticEquation eqn(c2, c1, c0);
+    int nr = eqn.numOfRoots();
+    if (nr == 0) {
+      return Hit();
+    }
+    float t = eqn.getMinSolution();
+    Vector pos = eye + v * t;
+    Vector n = pos - c;
+
+    return Hit(t, pos, n.Normalize(), material);
+  }
+
+
 };
 
 
@@ -272,7 +342,6 @@ struct Intersectable {
 // Sik 
 //--------------------------------------------------------
 struct Plane : Intersectable {
-  Material* material;
   Hit intersect(const Ray& ray) {
     // TODO implement
     return Hit();
@@ -284,15 +353,16 @@ struct Plane : Intersectable {
 // Kamera 
 //--------------------------------------------------------
 struct Camera {
-  Vector lookat, ahead, right, up, eye;
+  Vector eye, lookat, up, ahead, right;
 
   Camera() {}
-  Camera(Vector eye, Vector lookat, Vector up) {
+  Camera(Vector eye, Vector lookat, Vector up) :
+    eye(eye), lookat(lookat), up(up) {
     ahead = lookat - eye;
-    right = (up % ahead).Normalize();
+    right = (ahead % up).Normalize();
   }
 
-  Ray GetRay(float x, float y) {
+  Ray getRay(float x, float y) {
     Vector raydir = ahead + 
       right * (2 * x / Screen::XM- 1) +
       up * (2 * y / Screen::YM - 1);
@@ -312,14 +382,27 @@ struct Scene {
   int objCount;
 
   Scene() {
-    cam = Camera(Vector(0.0f, 0.0f, -1.0f), Vector(0.0f, 0.0f, 0.0f), 
+    cam = Camera(Vector(0.0f, 0.0f, 1.0f), Vector(0.0f, 0.0f, 0.0f), 
         Vector(0.0f, 1.0f, 0.0f));
-    amLight = AmbientLight(1.0f, WHITE);
-    pointLight = PointLight(1.0f, Vector(0.5f, -0.5f, 0.8f), WHITE);
+    amLight = AmbientLight(1.0f, Color(0.1f, 0.1f, 0.1f));
+    pointLight = PointLight(1.0f, Vector(0.5f, 0.5f, 0.8f), WHITE);
     objCount = 0;
   }
 
+  ~Scene() {
+    for (int i = 0; i < objCount; i++) {
+      delete objects[i];
+    }
+  }
+
   void build() {
+    Material* redMaterial = new RoughMaterial();
+    redMaterial->kd = Color(1.0f, 0.0f, 0.0f);
+    redMaterial->ks = Color(1.0f, 0.0f, 0.0f);
+    redMaterial->shininess = 50;
+    Intersectable* sphere = 
+      new Sphere(redMaterial, 0.8f, Vector(0.0f, 0.0f, -1.5f));
+    objects[objCount++] = sphere;
     // TODO add objects
   }
 
@@ -339,15 +422,16 @@ struct Scene {
 
   Color trace(Ray ray) {
     Hit hit = firstIntersect(ray);
+    Color outRadiance = amLight.getInRad(Vector());
     if (hit.t < 0) {
-      return amLight.getInRad(Vector());
+      return outRadiance;
     }
 
     Vector n = hit.n;
     Vector v = (ray.dir * -1).Normalize();
     Vector l = pointLight.getLightDir(hit.pos);
     Color inRad = pointLight.getInRad(hit.pos);
-    Color outRadiance = hit.material->shade(n, v, l, inRad);
+    outRadiance = outRadiance + hit.material->shade(n, v, l, inRad);
 
     if (hit.material->isReflective()) {
       Vector inDir = v * -1.0;
@@ -359,19 +443,48 @@ struct Scene {
 
     return outRadiance;
   }
+
+  void render() {
+    Color image[Screen::XM*Screen::YM];
+    for (int y = 0; y < Screen::YM; y++) {
+      for (int x = 0; x < Screen::XM; x++) {
+        if (x == 300 && y == 300) {
+          std::cout << "now";
+        }
+        Ray ray = cam.getRay(x, y);
+        image[y * Screen::XM + x] = trace(ray);
+      }
+    }
+
+    glDrawPixels(Screen::XM, Screen::YM, GL_RGB, GL_FLOAT, image);
+  }
+
+
 };
+
 
 // Inicializacio, a program futasanak kezdeten, az OpenGL kontextus letrehozasa utan hivodik meg (ld. main() fv.)
 void onInitialization( ) { 
 	glViewport(0, 0, Screen::XM, Screen::YM);
 }
 
+bool run = false;
+
 // Rajzolas, ha az alkalmazas ablak ervenytelenne valik, akkor ez a fuggveny hivodik meg
 void onDisplay( ) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);		// torlesi szin beallitasa
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // kepernyo torles
 
+    if (run) {
+      return;
+    }
+
+    Scene scene;
+    scene.build();
+    scene.render();
+
     glutSwapBuffers();     				// Buffercsere: rajzolas vege
+    run = true;
 
 }
 
@@ -400,7 +513,7 @@ void onMouseMotion(int x, int y)
 
 // `Idle' esemenykezelo, jelzi, hogy az ido telik, az Idle esemenyek frekvenciajara csak a 0 a garantalt minimalis ertek
 void onIdle( ) {
-     long time = glutGet(GLUT_ELAPSED_TIME);		// program inditasa ota eltelt ido
+     //long time = glutGet(GLUT_ELAPSED_TIME);		// program inditasa ota eltelt ido
 
 }
 
