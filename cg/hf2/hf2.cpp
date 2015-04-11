@@ -242,11 +242,16 @@ struct Material {
   virtual Vector reflect(Vector inDir, Vector n) = 0;
   virtual Color shade(Vector n, Vector viewDir, Vector l, Color inRad) = 0;
   virtual Color fresnel(Vector inDir, Vector n) = 0;
+  virtual bool isBlackHole() = 0;
 };
 
 struct SmoothMaterial : Material {
   bool isReflective() {
     return true;
+  }
+
+  bool isBlackHole() {
+    return false;
   }
 
   bool isCheckboard() {
@@ -268,7 +273,7 @@ struct SmoothMaterial : Material {
 
   Color calcF0(Color n, Color k) {
     return (sq(n - 1.0f) + sq(k)) / (sq(n + 1.0f) + sq(k));
-   }
+  }
 };
 
 struct RoughMaterial : Material {
@@ -281,6 +286,10 @@ struct RoughMaterial : Material {
   }
 
   virtual bool isCheckboard() {
+    return false;
+  }
+
+  virtual bool isBlackHole() {
     return false;
   }
 
@@ -312,6 +321,10 @@ struct CheckboardMaterial : RoughMaterial {
     return true;
   };
 
+  bool isBlackHole() {
+    return false;
+  }
+
   Color checkboardShade(Material* whiteMat, Material* blackMat, Vector p,
       Vector n, Vector viewDir, Vector l, Color inRad) {
     int i = p.x * 10;
@@ -322,6 +335,16 @@ struct CheckboardMaterial : RoughMaterial {
     }
 
     return blackMat->shade(n, viewDir, l, inRad);
+  }
+};
+
+struct BlackHoleMaterial : RoughMaterial {
+  bool isCheckboard() {
+    return false;
+  }
+
+  bool isBlackHole() {
+    return true;
   }
 };
 
@@ -574,6 +597,7 @@ struct Scene {
   Material* blackMat;
   Material* whiteMat;
   Material* checkMat;
+  Material* blackHoleMat;
   Camera cam;
   AmbientLight amLight;
   PointLight pointLight;
@@ -597,6 +621,7 @@ struct Scene {
     delete blackMat;
     delete whiteMat;
     delete checkMat;
+    delete blackHoleMat;
   }
 
   void addObject(Intersectable* object) {
@@ -629,6 +654,8 @@ struct Scene {
     checkMat->kd = Color(1.0f, 1.0f, 1.0f);
     checkMat->ks = Color(1.0f, 1.0f, 1.0f);
     checkMat->shininess = 20;
+
+    blackHoleMat = new BlackHoleMaterial();
   }
 
   void addWalls() {
@@ -660,12 +687,17 @@ struct Scene {
     addObject(torus.toMesh());
   }
 
+  void addBlackHole() {
+    addObject(new Sphere(blackHoleMat, 0.1f, Vector(-0.3f, 0.3f, -0.5f)));
+  }
+
   void build() {
     createMaterials();
     addWalls();
     addTorus();
+    addBlackHole();
 
-//    addObject(new Sphere(redMat, 0.2f, Vector(0.0f, -0.5f, -0.5f)));
+    //    addObject(new Sphere(redMat, 0.2f, Vector(0.0f, -0.5f, -0.5f)));
 
     //objects[objCount++] = torus.toMesh();
     //    ((Mesh*)torus.toMesh())->draw();
@@ -687,10 +719,14 @@ struct Scene {
   }
 
   Color trace(Ray ray, int depth) {
-    if (depth > 100) {
+    if (depth > 10) {
       return Color();
     }
     Hit hit = firstIntersect(ray);
+
+    if (hit.material->isBlackHole()) {
+      return Color();
+    };
     Color outRadiance = amLight.getInRad(Vector());
     if (hit.t < 0) {
       return outRadiance;
@@ -718,7 +754,7 @@ struct Scene {
       }
 
       matColor = ((CheckboardMaterial*)material)->checkboardShade(whiteMat,
-        blackMat, planeCoord, n, v, l, inRad);
+          blackMat, planeCoord, n, v, l, inRad);
     } else {
       matColor = hit.material->shade(n, v, l, inRad);
     }
