@@ -138,6 +138,8 @@ struct Color {
 const float EPSILON = 1e-5;
 const float RAY_LENGTH = 0.05;
 const int TRACE_MAX_DEPTH = 100;
+const float G =  6.673e-11;
+const float EARTH_M = 5.97219e24;
 
 inline float sq(float x) { return x * x; }
 inline Color sq(Color col) { return col * col; }
@@ -613,12 +615,14 @@ struct Scene {
   Material* whiteMat;
   Material* checkMat;
   Material* blackHoleMat;
+  Vector blackHoleCenter;
   Camera cam;
   AmbientLight amLight;
   PointLight pointLight;
   int objCount;
 
   Scene() {
+    blackHoleCenter = Vector(-0.1f, 0.3f, -0.3f);
     cam = Camera(Vector(0.0f, 0.0f, 1.0f), Vector(0.0f, 0.0f, 0.0f), 
         Vector(0.0f, 1.0f, 0.0f));
     amLight = AmbientLight(1.0f, Color(0.1f, 0.1f, 0.1f));
@@ -696,14 +700,14 @@ struct Scene {
   }
 
   void addTorus() {
-    Torus torus(goldMat, Vector(0.2f, -0.2f, -0.4f),
+    Torus torus(goldMat, Vector(-0.2f, -0.3f, -0.7f),
         0.1f, 0.4f, 4, 6);
 
     addObject(torus.toMesh());
   }
 
   void addBlackHole() {
-    addObject(new Sphere(blackHoleMat, 0.1f, Vector(-0.3f, 0.3f, -0.5f)));
+    addObject(new Sphere(blackHoleMat, 0.1f, blackHoleCenter));
   }
 
   void build() {
@@ -711,11 +715,6 @@ struct Scene {
     addWalls();
     addTorus();
     addBlackHole();
-
-//    addObject(new Sphere(redMat, 1.0f, Vector(0.0f, -0.5f, -0.5f)));
-
-    //objects[objCount++] = torus.toMesh();
-    //    ((Mesh*)torus.toMesh())->draw();
   }
 
 
@@ -733,15 +732,30 @@ struct Scene {
     return bestHit;
   }
 
+  Vector calcDelta(Vector eye) {
+    Vector toBlackHole = blackHoleCenter - eye;
+    float distanceFromBlackHole = toBlackHole.Length(); 
+    float distanceInM = 0.05 * distanceFromBlackHole;
+
+    Vector blackHoleDir = toBlackHole.Normalize();
+    float aMagnitude = (G * EARTH_M / sq(distanceInM));
+    aMagnitude *= 1e-18;
+
+    Vector a = blackHoleDir * aMagnitude;
+    return Vector(a * RAY_LENGTH);
+  }
+
+  Ray getNextRay(Ray currentRay) {
+    return Ray(currentRay.origin + currentRay.dir * RAY_LENGTH, 
+        currentRay.dir + calcDelta(currentRay.origin));
+  }
+
   Color trace(Ray ray, int depth) {
     Color outRadiance = amLight.getInRad(Vector());
 
     if (depth > TRACE_MAX_DEPTH) {
       return outRadiance; 
     }
-
-    Ray nextRay = Ray(ray.origin + ray.dir * RAY_LENGTH, 
-        ray.dir + Vector(0.01f, 0.01f, 0.01f));
 
     if (ray.origin.z > 0.8f) {
       //return trace(nextRay, depth + 1);
@@ -754,7 +768,7 @@ struct Scene {
     };
 
     if (hit.t < 0 || hit.t >= RAY_LENGTH) {
-      return trace(nextRay, depth + 1);
+      return trace(getNextRay(ray), depth + 1);
     }
 
 
@@ -793,7 +807,8 @@ struct Scene {
       Ray reflectedRay(hit.pos + Vector(1e-4f, 1e-4f, 1e-4f),
           reflectionDir.Normalize());
       outRadiance = outRadiance +
-        trace(reflectedRay, depth + 1) * hit.material->fresnel(inDir, n);
+        trace(getNextRay(reflectedRay), depth + 1) *
+        hit.material->fresnel(inDir, n);
     }
 
     return outRadiance;
@@ -802,14 +817,13 @@ struct Scene {
   void render() {
     Color image[Screen::XM*Screen::YM];
     for (int y = 0; y < Screen::YM; y++) {
-      for (int x = 0; x < Screen::XM; x += 2) {
+      for (int x = 0; x < Screen::XM; x ++) {
         if (x == 320 && y == 500) {
           std::cout << "now";
         }
         std::cout << x << ";" << y << std::endl;
         Ray ray = cam.getRay(x, y);
-        Color traceResult = image[y * Screen::XM + x] = trace(ray, 0);
-        image[y * Screen::XM + x + 1] = traceResult; 
+        image[y * Screen::XM + x] = trace(ray, 0);
       }
     }
 
