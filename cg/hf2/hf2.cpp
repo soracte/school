@@ -62,7 +62,6 @@
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Innentol modosithatod...
 
-#include <iostream>
 //--------------------------------------------------------
 // 3D Vektor
 //--------------------------------------------------------
@@ -429,10 +428,6 @@ struct Triangle : Intersectable {
     Intersectable(material), a(a), b(b), c(c), inverse(inverse) { }
 
   Hit intersect(const Ray& ray) {
-    if (aeq(ray.dir.x, 0.1f) && aeq(ray.dir.y, 0.4f)) {
-      std::cout << "reached" << std::endl;
-    }
-
     Vector eye = ray.origin;
     Vector v = ray.dir;
     Vector n = ((b - a) % (c - a)).Normalize();
@@ -613,6 +608,8 @@ struct Scene {
   Material* redMat; 
   Material* blackMat;
   Material* whiteMat;
+  Material* greenMat;
+  Material* blueMat;
   Material* checkMat;
   Material* blackHoleMat;
   Vector blackHoleCenter;
@@ -634,9 +631,11 @@ struct Scene {
     for (int i = 0; i < objCount; i++) {
       delete objects[i];
     }
-
+  
     delete goldMat;
     delete redMat;
+    delete greenMat;
+    delete blueMat;
     delete blackMat;
     delete whiteMat;
     delete checkMat;
@@ -662,12 +661,22 @@ struct Scene {
     blackMat = new RoughMaterial();
     blackMat->kd = Color(0.0f, 0.0f, 0.0f);
     blackMat->ks = Color(0.0f, 0.0f, 0.0f);
-    blackMat->shininess = 20;
+    blackMat->shininess = 50;
 
     whiteMat = new RoughMaterial();
     whiteMat->kd = Color(1.0f, 1.0f, 1.0f);
     whiteMat->ks = Color(1.0f, 1.0f, 1.0f);
-    whiteMat->shininess = 20;
+    whiteMat->shininess = 50;
+
+    greenMat = new RoughMaterial();
+    greenMat->kd = Color(0.0f, 1.0f, 0.0f);
+    greenMat->ks = Color(0.0f, 1.0f, 0.0f);
+    greenMat->shininess = 50;
+    
+    blueMat = new RoughMaterial();
+    blueMat->kd = Color(0.0f, 0.0f, 1.0f);
+    blueMat->ks = Color(0.0f, 0.0f, 1.0f);
+    blueMat->shininess = 50;
 
     checkMat = new CheckboardMaterial();
     checkMat->kd = Color(1.0f, 1.0f, 1.0f);
@@ -757,9 +766,6 @@ struct Scene {
       return outRadiance; 
     }
 
-    if (ray.origin.z > 0.8f) {
-      //return trace(nextRay, depth + 1);
-    }
     Hit hit = firstIntersect(ray);
 
 
@@ -784,17 +790,35 @@ struct Scene {
     if (material->isCheckboard()) {
       Vector planeCoord;
       Vector p = hit.objPos;
+      int planeSide;
 
       if (aeq(p.x, 0)) {
         planeCoord = Vector(p.y, p.z);
+        planeSide = 0;
       } else if (aeq(p.y, 0)) {
         planeCoord = Vector(p.x, p.z);
+        planeSide = 1;
       } else {
         planeCoord = Vector(p.x, p.y);
+        planeSide = 2;
+      }
+
+      Material* colorMat;
+
+      switch (planeSide) {
+        case 0:
+          colorMat = redMat;
+          break;
+        case 1:
+          colorMat = greenMat;
+          break;
+        case 2:
+          colorMat = blueMat;
+          break;
       }
 
       matColor = ((CheckboardMaterial*)material)->checkboardShade(whiteMat,
-          blackMat, planeCoord, n, v, l, inRad);
+          colorMat, planeCoord, n, v, l, inRad);
     } else {
       matColor = hit.material->shade(n, v, l, inRad);
     }
@@ -818,10 +842,6 @@ struct Scene {
     Color image[Screen::XM*Screen::YM];
     for (int y = 0; y < Screen::YM; y++) {
       for (int x = 0; x < Screen::XM; x ++) {
-        if (x == 320 && y == 500) {
-          std::cout << "now";
-        }
-        std::cout << x << ";" << y << std::endl;
         Ray ray = cam.getRay(x, y);
         image[y * Screen::XM + x] = trace(ray, 0);
       }
@@ -873,9 +893,6 @@ void onKeyboardUp(unsigned char key, int x, int y) {
 void onMouse(int button, int state, int x, int y) {
   if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)   // A GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON illetve GLUT_DOWN / GLUT_UP
   {
-    //    std::cout << "click@(" << (2*x/600.0f-1) << ";" << -(2*y/600.0f-1) 
-    //     << ")" << std::endl;
-    std::cout << "click@ " << x << ";" << y << std::endl;
     glutPostRedisplay( ); 						 // Ilyenkor rajzold ujra a kepet
   }
 }
