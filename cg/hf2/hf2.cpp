@@ -113,14 +113,32 @@ struct Color {
   Color operator*(const Color& c) { 
     return Color(r * c.r, g * c.g, b * c.b); 
   }
+
+  Color operator/(const Color& c) {
+    return Color(r / c.r, g / c.g, b / c.b);
+  }
+
   Color operator+(const Color& c) {
     return Color(r + c.r, g + c.g, b + c.b); 
+  }
+
+  Color operator-(const Color& c) {
+    return Color(r - c.r, g - c.g, b - c.b);
+  }
+
+  Color operator+(float f) {
+    return Color(r + f, g + f, b + f);
+  }
+
+  Color operator-(float f) {
+    return Color(r - f, g - f, b - f);
   }
 };
 
 const float EPSILON = 1e-5;
 
 inline float sq(float x) { return x * x; }
+inline Color sq(Color col) { return col * col; }
 inline bool aeq(float x, float y) { return fabs(x - y) < EPSILON; }
 
 struct QuadraticEquation {
@@ -236,7 +254,7 @@ struct SmoothMaterial : Material {
   }
 
   Vector reflect(Vector inDir, Vector n) {
-    return inDir - n * (n * inDir) * 2.0f;
+    return (inDir - n * (n * inDir) * 2.0f).Normalize();
   }
 
   Color shade(Vector n, Vector viewDir, Vector l, Color inRad) {
@@ -245,8 +263,12 @@ struct SmoothMaterial : Material {
 
   Color fresnel(Vector inDir, Vector n) {
     float cosa = fabs(n * inDir);
-    return F0 + (Color(1.0f, 1.0f, 1.0f) + (F0 * -1.0f)) * pow(1 - cosa, 5);
+    return F0 + (Color(1.0f, 1.0f, 1.0f) - F0) * pow(1 - cosa, 5);
   }
+
+  Color calcF0(Color n, Color k) {
+    return (sq(n - 1.0f) + sq(k)) / (sq(n + 1.0f) + sq(k));
+   }
 };
 
 struct RoughMaterial : Material {
@@ -443,39 +465,6 @@ struct Mesh : Intersectable {
     return Hit();
   }
 
-  //TODO DEBUG
-  //void draw() {
-  //  for (int i = 0; i < 10; i++) {
-  //    Triangle triangle(material, vertices[i],
-  //        vertices[(i + 1) % vertCount],   
-  //        vertices[(i + 2) % vertCount]);
-
-  //    std::cout << "triangle #" << i << std::endl;
-
-  //    glBegin(GL_LINE_STRIP); {
-  //      Vector a = triangle.a;
-  //      Vector b = triangle.b;
-  //      Vector c = triangle.c;
-  //  std::cout << a.x << ";" << a.y << ";" << a.z << 
-  //       std::endl; 
-  //  std::cout << b.x << ";" << b.y << ";" << b.z << 
-  //       std::endl; 
-  //  std::cout << c.x << ";" << c.y << ";" << c.z << 
-  //       std::endl; 
-
-  //      glVertex3f(a.x, a.y, a.z);
-  //      glVertex3f(b.x, b.y, b.z);
-  //      glVertex3f(c.x, c.y, c.z);
-  //      }
-  //    std::cout << std::endl;
-  //    glEnd();
-  //    }
-
-
-  //}
-
-
-
   void addVertex(Vector vertex) {
     vertices[vertCount++] = vertex;
   }
@@ -533,10 +522,9 @@ struct Torus : Intersectable {
 //--------------------------------------------------------
 struct Plane : Intersectable {
   Vector p, n;
-  int no;
 
-  Plane(Material* material, Vector p, Vector n, int no) : 
-    Intersectable(material), p(p), n(n), no(no) { }
+  Plane(Material* material, Vector p, Vector n) : 
+    Intersectable(material), p(p), n(n) { }
 
   Hit intersect(const Ray& ray) {
     Vector v = ray.dir;
@@ -616,6 +604,12 @@ struct Scene {
   }
 
   void createMaterials() {
+
+    goldMat = new SmoothMaterial();
+    Color goldN(0.17f, 0.35f, 1.5f);
+    Color goldK(3.1f, 2.7f, 1.9f);
+    goldMat->F0 = ((SmoothMaterial*)goldMat)->calcF0(goldN, goldK);
+
     redMat = new RoughMaterial();
     redMat->kd = Color(0.8f, 0.1f, 0.1f);
     redMat->ks = Color(0.5f, 0.2f, 0.1f);
@@ -640,33 +634,28 @@ struct Scene {
   void addWalls() {
     addObject(new Plane(checkMat,
           Vector(-0.8f, 0.0f, 0.0f),
-          Vector(1.0f, 0.0f, 0.0f),
-          0));
+          Vector(1.0f, 0.0f, 0.0f)));
 
     addObject(new Plane(checkMat,
           Vector(0.0f, 0.0f, -0.8f),
-          Vector(0.0f, 0.0f, 1.0f),
-          1));
+          Vector(0.0f, 0.0f, 1.0f)));
 
     addObject(new Plane(checkMat,
           Vector(0.8f, 0.0f, 0.0f),
-          Vector(-1.0f, 0.0f, 0.0f),
-          2));
+          Vector(-1.0f, 0.0f, 0.0f)));
 
     addObject(new Plane(checkMat,
           Vector(0.0f, 0.8f, 0.0f),
-          Vector(0.0f, -1.0f, 0.0f),
-          3));
+          Vector(0.0f, -1.0f, 0.0f)));
 
     addObject(new Plane(checkMat,
           Vector(-0.8f, -0.8f, 0.0f),
-          Vector(0.0f, 1.0f, 0.0f),
-          4));
+          Vector(0.0f, 1.0f, 0.0f)));
   }
 
   void addTorus() {
-    Torus torus(redMat, Vector(0.2f, -0.2f, -0.5f),
-        0.08f, 0.4f, 4, 6);
+    Torus torus(goldMat, Vector(0.2f, -0.2f, -0.5f),
+        0.1f, 0.4f, 4, 6);
 
     addObject(torus.toMesh());
   }
@@ -676,6 +665,7 @@ struct Scene {
     addWalls();
     addTorus();
 
+//    addObject(new Sphere(redMat, 0.2f, Vector(0.0f, -0.5f, -0.5f)));
 
     //objects[objCount++] = torus.toMesh();
     //    ((Mesh*)torus.toMesh())->draw();
@@ -696,7 +686,10 @@ struct Scene {
     return bestHit;
   }
 
-  Color trace(Ray ray) {
+  Color trace(Ray ray, int depth) {
+    if (depth > 100) {
+      return Color();
+    }
     Hit hit = firstIntersect(ray);
     Color outRadiance = amLight.getInRad(Vector());
     if (hit.t < 0) {
@@ -735,9 +728,10 @@ struct Scene {
     if (hit.material->isReflective()) {
       Vector inDir = v * -1.0;
       Vector reflectionDir = hit.material->reflect(inDir, n);
-      Ray reflectedRay(hit.pos, reflectionDir);
+      Ray reflectedRay(hit.pos + Vector(1e-4f, 1e-4f, 1e-4f),
+          reflectionDir.Normalize());
       outRadiance = outRadiance +
-        trace(reflectedRay) * hit.material->fresnel(inDir, n);
+        trace(reflectedRay, depth + 1) * hit.material->fresnel(inDir, n);
     }
 
     return outRadiance;
@@ -751,7 +745,7 @@ struct Scene {
           std::cout << "now";
         }
         Ray ray = cam.getRay(x, y);
-        image[y * Screen::XM + x] = trace(ray);
+        image[y * Screen::XM + x] = trace(ray, 0);
       }
     }
 
