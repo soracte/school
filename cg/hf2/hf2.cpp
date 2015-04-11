@@ -220,6 +220,7 @@ struct Material {
   virtual ~Material() { }
 
   virtual bool isReflective() = 0;
+  virtual bool isCheckboard() = 0;
   virtual Vector reflect(Vector inDir, Vector n) = 0;
   virtual Color shade(Vector n, Vector viewDir, Vector l, Color inRad) = 0;
   virtual Color fresnel(Vector inDir, Vector n) = 0;
@@ -228,6 +229,10 @@ struct Material {
 struct SmoothMaterial : Material {
   bool isReflective() {
     return true;
+  }
+
+  bool isCheckboard() {
+    return false;
   }
 
   Vector reflect(Vector inDir, Vector n) {
@@ -253,6 +258,10 @@ struct RoughMaterial : Material {
     return Vector();
   }
 
+  virtual bool isCheckboard() {
+    return false;
+  }
+
   Color shade(Vector n, Vector viewDir, Vector l, Color inRad) {
     Color reflRad;
 
@@ -276,6 +285,26 @@ struct RoughMaterial : Material {
   }
 };
 
+struct CheckboardMaterial : RoughMaterial {
+  bool isCheckboard() {
+    return true;
+  };
+
+  Color checkboardShade(Material* whiteMat, Material* blackMat, Vector p,
+      Vector n, Vector viewDir, Vector l, Color inRad) {
+    int i = p.x * 10;
+    int j = p.y * 10;
+
+    if ((i + j) % 2 == 0) {
+      return whiteMat->shade(n, viewDir, l, inRad);
+    }
+
+    return blackMat->shade(n, viewDir, l, inRad);
+  }
+};
+
+
+
 //--------------------------------------------------------
 // Metszespont 
 //--------------------------------------------------------
@@ -284,9 +313,14 @@ struct Hit {
   Vector pos;
   Vector n;
   Material* material;
+  Vector objPos;
+
   Hit () { t = -1; }
   Hit (float t, Vector pos, Vector n, Material* material) :
     t(t), pos(pos), n(n), material(material) { }
+
+  Hit (float t, Vector pos, Vector n, Material* material, Vector objPos) :
+    t(t), pos(pos), n(n), material(material), objPos(objPos) { }
 };
 
 
@@ -410,35 +444,35 @@ struct Mesh : Intersectable {
   }
 
   //TODO DEBUG
-//void draw() {
-//  for (int i = 0; i < 10; i++) {
-//    Triangle triangle(material, vertices[i],
-//        vertices[(i + 1) % vertCount],   
-//        vertices[(i + 2) % vertCount]);
+  //void draw() {
+  //  for (int i = 0; i < 10; i++) {
+  //    Triangle triangle(material, vertices[i],
+  //        vertices[(i + 1) % vertCount],   
+  //        vertices[(i + 2) % vertCount]);
 
-//    std::cout << "triangle #" << i << std::endl;
+  //    std::cout << "triangle #" << i << std::endl;
 
-//    glBegin(GL_LINE_STRIP); {
-//      Vector a = triangle.a;
-//      Vector b = triangle.b;
-//      Vector c = triangle.c;
-//  std::cout << a.x << ";" << a.y << ";" << a.z << 
-//       std::endl; 
-//  std::cout << b.x << ";" << b.y << ";" << b.z << 
-//       std::endl; 
-//  std::cout << c.x << ";" << c.y << ";" << c.z << 
-//       std::endl; 
+  //    glBegin(GL_LINE_STRIP); {
+  //      Vector a = triangle.a;
+  //      Vector b = triangle.b;
+  //      Vector c = triangle.c;
+  //  std::cout << a.x << ";" << a.y << ";" << a.z << 
+  //       std::endl; 
+  //  std::cout << b.x << ";" << b.y << ";" << b.z << 
+  //       std::endl; 
+  //  std::cout << c.x << ";" << c.y << ";" << c.z << 
+  //       std::endl; 
 
-//      glVertex3f(a.x, a.y, a.z);
-//      glVertex3f(b.x, b.y, b.z);
-//      glVertex3f(c.x, c.y, c.z);
-//      }
-//    std::cout << std::endl;
-//    glEnd();
-//    }
+  //      glVertex3f(a.x, a.y, a.z);
+  //      glVertex3f(b.x, b.y, b.z);
+  //      glVertex3f(c.x, c.y, c.z);
+  //      }
+  //    std::cout << std::endl;
+  //    glEnd();
+  //    }
 
 
-//}
+  //}
 
 
 
@@ -499,9 +533,10 @@ struct Torus : Intersectable {
 //--------------------------------------------------------
 struct Plane : Intersectable {
   Vector p, n;
+  int no;
 
-  Plane(Material* material, Vector p, Vector n) : 
-    Intersectable(material), p(p), n(n) { }
+  Plane(Material* material, Vector p, Vector n, int no) : 
+    Intersectable(material), p(p), n(n), no(no) { }
 
   Hit intersect(const Ray& ray) {
     Vector v = ray.dir;
@@ -512,7 +547,9 @@ struct Plane : Intersectable {
       return Hit();
     }
 
-    return Hit(t, eye + v * t, n, material);
+    Vector pos = eye + v * t;
+
+    return Hit(t, pos, n, material, pos - p);
   } 
 };
 
@@ -544,8 +581,11 @@ struct Camera {
 //--------------------------------------------------------
 struct Scene {
   Intersectable* objects[10];
-  Material* goldMaterial;
-  Material* redMaterial; 
+  Material* goldMat;
+  Material* redMat; 
+  Material* blackMat;
+  Material* whiteMat;
+  Material* checkMat;
   Camera cam;
   AmbientLight amLight;
   PointLight pointLight;
@@ -564,48 +604,81 @@ struct Scene {
       delete objects[i];
     }
 
-    //delete goldMaterial;
-    delete redMaterial;
+    delete goldMat;
+    delete redMat;
+    delete blackMat;
+    delete whiteMat;
+    delete checkMat;
   }
 
   void addObject(Intersectable* object) {
     objects[objCount++] = object;
   }
 
-  void addWalls() {
-    addObject(new Plane(redMaterial,
-        Vector(-0.8f, 0.0f, 0.0f),
-        Vector(1.0f, 0.0f, 0.0f)));
+  void createMaterials() {
+    redMat = new RoughMaterial();
+    redMat->kd = Color(0.8f, 0.1f, 0.1f);
+    redMat->ks = Color(0.5f, 0.2f, 0.1f);
+    redMat->shininess = 5;
 
-    addObject(new Plane(redMaterial,
-        Vector(0.0f, 0.0f, -0.8f),
-        Vector(0.0f, 0.0f, 1.0f)));
+    blackMat = new RoughMaterial();
+    blackMat->kd = Color(0.0f, 0.0f, 0.0f);
+    blackMat->ks = Color(0.0f, 0.0f, 0.0f);
+    blackMat->shininess = 20;
 
-    addObject(new Plane(redMaterial,
-        Vector(0.8f, 0.0f, 0.0f),
-        Vector(-1.0f, 0.0f, 0.0f)));
+    whiteMat = new RoughMaterial();
+    whiteMat->kd = Color(1.0f, 1.0f, 1.0f);
+    whiteMat->ks = Color(1.0f, 1.0f, 1.0f);
+    whiteMat->shininess = 20;
 
-    addObject(new Plane(redMaterial,
-        Vector(0.0f, 0.8f, 0.0f),
-        Vector(0.0f, -1.0f, 0.0f)));
-
-    addObject(new Plane(redMaterial,
-        Vector(-0.8f, -0.8f, 0.0f),
-        Vector(0.0f, 1.0f, 0.0f)));
+    checkMat = new CheckboardMaterial();
+    checkMat->kd = Color(1.0f, 1.0f, 1.0f);
+    checkMat->ks = Color(1.0f, 1.0f, 1.0f);
+    checkMat->shininess = 20;
   }
 
+  void addWalls() {
+    addObject(new Plane(checkMat,
+          Vector(-0.8f, 0.0f, 0.0f),
+          Vector(1.0f, 0.0f, 0.0f),
+          0));
+
+    addObject(new Plane(checkMat,
+          Vector(0.0f, 0.0f, -0.8f),
+          Vector(0.0f, 0.0f, 1.0f),
+          1));
+
+    addObject(new Plane(checkMat,
+          Vector(0.8f, 0.0f, 0.0f),
+          Vector(-1.0f, 0.0f, 0.0f),
+          2));
+
+    addObject(new Plane(checkMat,
+          Vector(0.0f, 0.8f, 0.0f),
+          Vector(0.0f, -1.0f, 0.0f),
+          3));
+
+    addObject(new Plane(checkMat,
+          Vector(-0.8f, -0.8f, 0.0f),
+          Vector(0.0f, 1.0f, 0.0f),
+          4));
+  }
+
+  void addTorus() {
+    Torus torus(redMat, Vector(0.2f, -0.2f, -0.5f),
+        0.08f, 0.4f, 4, 6);
+
+    addObject(torus.toMesh());
+  }
 
   void build() {
-    redMaterial = new RoughMaterial();
-    redMaterial->kd = Color(1.0f, 0.0f, 0.0f);
-    redMaterial->ks = Color(1.0f, 0.0f, 0.0f);
-    redMaterial->shininess = 50;
-    Torus torus = Torus(redMaterial, Vector(0.0f, 0.0f, -1.0f),
-        0.2f, 0.6f, 6, 9);
+    createMaterials();
     addWalls();
+    addTorus();
+
 
     //objects[objCount++] = torus.toMesh();
-//    ((Mesh*)torus.toMesh())->draw();
+    //    ((Mesh*)torus.toMesh())->draw();
   }
 
 
@@ -634,7 +707,30 @@ struct Scene {
     Vector v = (ray.dir * -1).Normalize();
     Vector l = pointLight.getLightDir(hit.pos);
     Color inRad = pointLight.getInRad(hit.pos);
-    outRadiance = outRadiance + hit.material->shade(n, v, l, inRad);
+
+    Material* material = hit.material;
+
+    Color matColor;
+
+    if (material->isCheckboard()) {
+      Vector planeCoord;
+      Vector p = hit.objPos;
+
+      if (aeq(p.x, 0)) {
+        planeCoord = Vector(p.y, p.z);
+      } else if (aeq(p.y, 0)) {
+        planeCoord = Vector(p.x, p.z);
+      } else {
+        planeCoord = Vector(p.x, p.y);
+      }
+
+      matColor = ((CheckboardMaterial*)material)->checkboardShade(whiteMat,
+        blackMat, planeCoord, n, v, l, inRad);
+    } else {
+      matColor = hit.material->shade(n, v, l, inRad);
+    }
+
+    outRadiance = outRadiance + matColor;
 
     if (hit.material->isReflective()) {
       Vector inDir = v * -1.0;
@@ -705,8 +801,8 @@ void onKeyboardUp(unsigned char key, int x, int y) {
 void onMouse(int button, int state, int x, int y) {
   if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)   // A GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON illetve GLUT_DOWN / GLUT_UP
   {
-//    std::cout << "click@(" << (2*x/600.0f-1) << ";" << -(2*y/600.0f-1) 
- //     << ")" << std::endl;
+    //    std::cout << "click@(" << (2*x/600.0f-1) << ";" << -(2*y/600.0f-1) 
+    //     << ")" << std::endl;
     std::cout << "click@ " << x << ";" << y << std::endl;
     glutPostRedisplay( ); 						 // Ilyenkor rajzold ujra a kepet
   }
