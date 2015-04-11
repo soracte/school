@@ -136,6 +136,8 @@ struct Color {
 };
 
 const float EPSILON = 1e-5;
+const float RAY_LENGTH = 0.05;
+const int TRACE_MAX_DEPTH = 100;
 
 inline float sq(float x) { return x * x; }
 inline Color sq(Color col) { return col * col; }
@@ -467,10 +469,22 @@ struct Triangle : Intersectable {
 struct Mesh : Intersectable {
   Vector vertices[500];
   int vertCount;
+  Sphere surroundingSphere;
 
-  Mesh(Material* material) : Intersectable(material), vertCount(0) { }
+  Mesh(Material* material, Sphere surroundingSphere) : 
+    Intersectable(material),
+    vertCount(0),
+    surroundingSphere(surroundingSphere) { }
 
   Hit intersect(const Ray& ray) {
+    Vector eye = ray.origin;
+    Vector v = ray.dir;
+    Vector rayEnd = eye + v * RAY_LENGTH;
+    Vector fromCenter = rayEnd - surroundingSphere.c;
+
+    if (fromCenter.Length() >= surroundingSphere.r) {
+      return Hit();
+    }
     bool inverse = false;
     for (int i = 0; i < vertCount; i++) {
       Triangle triangle(material, vertices[i],
@@ -503,7 +517,7 @@ struct Torus : Intersectable {
 
   Torus(Material* material, Vector c,
       float inR, float bigR, int inRes, int bigRes) :
-    Intersectable(material), inR(inR), bigR(bigR),
+    Intersectable(material), c(c), inR(inR), bigR(bigR),
     inRes(inRes), bigRes(bigRes), vertCount(0) { 
 
       float inStep = 2 * M_PI / (float)inRes;
@@ -526,7 +540,8 @@ struct Torus : Intersectable {
   Hit intersect(const Ray& ray) { return Hit(); }
 
   Intersectable* toMesh() {
-    Mesh* mesh = new Mesh(material);
+    Sphere surroundingSphere(material, bigR + inR, c);
+    Mesh* mesh = new Mesh(material, surroundingSphere);
 
     for (int i = 0; i < bigRes; i++) {
       for (int j = 0; j <= inRes; j++) {
@@ -681,7 +696,7 @@ struct Scene {
   }
 
   void addTorus() {
-    Torus torus(goldMat, Vector(0.2f, -0.2f, -0.5f),
+    Torus torus(goldMat, Vector(0.2f, -0.2f, -0.4f),
         0.1f, 0.4f, 4, 6);
 
     addObject(torus.toMesh());
@@ -697,7 +712,7 @@ struct Scene {
     addTorus();
     addBlackHole();
 
-    //    addObject(new Sphere(redMat, 0.2f, Vector(0.0f, -0.5f, -0.5f)));
+//    addObject(new Sphere(redMat, 1.0f, Vector(0.0f, -0.5f, -0.5f)));
 
     //objects[objCount++] = torus.toMesh();
     //    ((Mesh*)torus.toMesh())->draw();
@@ -719,18 +734,29 @@ struct Scene {
   }
 
   Color trace(Ray ray, int depth) {
-    if (depth > 10) {
-      return Color();
+    Color outRadiance = amLight.getInRad(Vector());
+
+    if (depth > TRACE_MAX_DEPTH) {
+      return outRadiance; 
+    }
+
+    Ray nextRay = Ray(ray.origin + ray.dir * RAY_LENGTH, 
+        ray.dir + Vector(0.01f, 0.01f, 0.01f));
+
+    if (ray.origin.z > 0.8f) {
+      //return trace(nextRay, depth + 1);
     }
     Hit hit = firstIntersect(ray);
 
-    if (hit.material->isBlackHole()) {
+
+    if (hit.t > 0 && hit.t <= RAY_LENGTH && hit.material->isBlackHole()) {
       return Color();
     };
-    Color outRadiance = amLight.getInRad(Vector());
-    if (hit.t < 0) {
-      return outRadiance;
+
+    if (hit.t < 0 || hit.t >= RAY_LENGTH) {
+      return trace(nextRay, depth + 1);
     }
+
 
     Vector n = hit.n;
     Vector v = (ray.dir * -1).Normalize();
@@ -776,12 +802,14 @@ struct Scene {
   void render() {
     Color image[Screen::XM*Screen::YM];
     for (int y = 0; y < Screen::YM; y++) {
-      for (int x = 0; x < Screen::XM; x++) {
+      for (int x = 0; x < Screen::XM; x += 2) {
         if (x == 320 && y == 500) {
           std::cout << "now";
         }
+        std::cout << x << ";" << y << std::endl;
         Ray ray = cam.getRay(x, y);
-        image[y * Screen::XM + x] = trace(ray, 0);
+        Color traceResult = image[y * Screen::XM + x] = trace(ray, 0);
+        image[y * Screen::XM + x + 1] = traceResult; 
       }
     }
 
